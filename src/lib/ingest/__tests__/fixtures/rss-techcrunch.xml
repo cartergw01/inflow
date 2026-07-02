@@ -1,0 +1,404 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>TechCrunch</title>
+	<atom:link href="https://techcrunch.com/feed/" rel="self" type="application/rss+xml" />
+	<link>https://techcrunch.com/</link>
+	<description>Startup and Technology News</description>
+	<lastBuildDate>Thu, 02 Jul 2026 16:02:18 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=6.9.4</generator>
+
+<image>
+	<url>https://techcrunch.com/wp-content/uploads/2015/02/cropped-cropped-favicon-gradient.png?w=32</url>
+	<title>TechCrunch</title>
+	<link>https://techcrunch.com/</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+	<item>
+		<title>Melinda Gates’ venture firm backs Magnify Ventures&#8217; $46.6M Fund II</title>
+		<link>https://techcrunch.com/2026/07/02/melinda-gates-venture-firm-backs-magnify-ventures-46-6m-fund-ii/</link>
+		
+		<dc:creator><![CDATA[Dominic-Madori Davis]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 15:26:43 +0000</pubDate>
+				<category><![CDATA[Venture]]></category>
+		<category><![CDATA[Care Economy]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<category><![CDATA[Magnify Ventures]]></category>
+		<category><![CDATA[Melinda French Gates]]></category>
+		<category><![CDATA[Pivotal Ventures]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138579</guid>
+
+					<description><![CDATA[Early-stage firm Magnify Ventures has raised a $46.6 million Fund II from LPs, including Melinda French Gates’ Pivotal Ventures.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>OpenAI proposed donating 5% of its equity to a US sovereign wealth fund</title>
+		<link>https://techcrunch.com/2026/07/02/openai-proposed-donating-5-of-its-equity-to-a-us-sovereign-wealth-fund/</link>
+		
+		<dc:creator><![CDATA[Russell Brandom]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 15:20:51 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Government & Policy]]></category>
+		<category><![CDATA[government]]></category>
+		<category><![CDATA[OpenAI]]></category>
+		<category><![CDATA[sam altman]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138583</guid>
+
+					<description><![CDATA[OpenAI CEO Sam Altman has reportedly proposed giving 5% of the company’s equity to a U.S. sovereign wealth fund, reviving discussions about letting the public share in the financial gains from the AI boom. ]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Popular TV-tracking app TV Time is shutting down as company focuses on AI</title>
+		<link>https://techcrunch.com/2026/07/02/popular-tv-tracking-app-tv-time-is-shutting-down-as-company-focuses-on-ai/</link>
+		
+		<dc:creator><![CDATA[Sarah Perez]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 15:14:03 +0000</pubDate>
+				<category><![CDATA[Apps]]></category>
+		<category><![CDATA[Media & Entertainment]]></category>
+		<category><![CDATA[Social]]></category>
+		<category><![CDATA[TC]]></category>
+		<category><![CDATA[TV Time]]></category>
+		<category><![CDATA[whip media]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138586</guid>
+
+					<description><![CDATA[TV Time, the popular TV-tracking app, is shutting down on July 15 as parent company Whip Media pivots toward enterprise AI products.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Lucid Motors&#8217; CFO is out as its new CEO continues leadership shakeup</title>
+		<link>https://techcrunch.com/2026/07/02/lucid-motors-cfo-is-out-as-its-new-ceo-continues-leadership-shakeup/</link>
+		
+		<dc:creator><![CDATA[Sean O'Kane]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 14:53:39 +0000</pubDate>
+				<category><![CDATA[Transportation]]></category>
+		<category><![CDATA[electric vehicles]]></category>
+		<category><![CDATA[EVs]]></category>
+		<category><![CDATA[Lucid Motors]]></category>
+		<category><![CDATA[people moves]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138570</guid>
+
+					<description><![CDATA[The company announced a new slate of executive hires meant to help turn things around, as Gravity SUV sales are not taking off as expected.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>US government says it got hacked — again</title>
+		<link>https://techcrunch.com/2026/07/02/us-government-says-it-got-hacked-again/</link>
+		
+		<dc:creator><![CDATA[Zack Whittaker]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 14:22:36 +0000</pubDate>
+				<category><![CDATA[Government & Policy]]></category>
+		<category><![CDATA[Security]]></category>
+		<category><![CDATA[cyberattack]]></category>
+		<category><![CDATA[cybersecurity]]></category>
+		<category><![CDATA[data breach]]></category>
+		<category><![CDATA[Homeland Security]]></category>
+		<category><![CDATA[intelligence]]></category>
+		<category><![CDATA[Trump Administration]]></category>
+		<category><![CDATA[us government]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138572</guid>
+
+					<description><![CDATA[A top Democrat on the Senate's Intelligence Committee warned that the information accessed on a Homeland Security intelligence-sharing network may risk national security.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Microsoft launches its own AI deployment company with $2.5 billion commitment</title>
+		<link>https://techcrunch.com/2026/07/02/microsoft-launches-its-own-ai-deployment-company-with-2-5-billion-commitment/</link>
+		
+		<dc:creator><![CDATA[Russell Brandom]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 13:53:00 +0000</pubDate>
+				<category><![CDATA[Enterprise]]></category>
+		<category><![CDATA[TC]]></category>
+		<category><![CDATA[AI]]></category>
+		<category><![CDATA[Microsoft]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138546</guid>
+
+					<description><![CDATA[Microsoft follows Amazon, OpenAI, and Anthropic with its new AI deployment group.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Tesla saw a massive sales jump in the second quarter</title>
+		<link>https://techcrunch.com/2026/07/02/tesla-saw-a-massive-sales-jump-in-the-second-quarter/</link>
+		
+		<dc:creator><![CDATA[Sean O'Kane]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 13:20:15 +0000</pubDate>
+				<category><![CDATA[Transportation]]></category>
+		<category><![CDATA[electric vehicles]]></category>
+		<category><![CDATA[EVs]]></category>
+		<category><![CDATA[Tesla]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138549</guid>
+
+					<description><![CDATA[The company delivered more than 480,000 EVs globally, seemingly thanks to geographic expansion and cheaper versions of the Model 3, Model Y, and Cybertruck.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Rivian raises EV sales forecast as Q2 production ramps up</title>
+		<link>https://techcrunch.com/2026/07/02/rivian-thinks-it-will-sell-more-evs-than-expected-this-year/</link>
+		
+		<dc:creator><![CDATA[Sean O'Kane]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 12:30:00 +0000</pubDate>
+				<category><![CDATA[Transportation]]></category>
+		<category><![CDATA[electric vehicles]]></category>
+		<category><![CDATA[EVs]]></category>
+		<category><![CDATA[Rivian]]></category>
+		<category><![CDATA[rivian r2]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138512</guid>
+
+					<description><![CDATA[The company now expects to ship a few thousand more vehicles by the end of 2026 than it previously expected, after launching its R2 SUV last month.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Yep, we&#8217;re using OpenClaw to date now</title>
+		<link>https://techcrunch.com/2026/07/02/yep-were-using-openclaw-to-date-now/</link>
+		
+		<dc:creator><![CDATA[Amanda Silberling]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 12:00:00 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[openclaw]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3137764</guid>
+
+					<description><![CDATA[Ben Guez has "a bunch of potential international wives in [his] DMs," thanks to an automated script he set up using OpenClaw, Claude code, and Instagram trials.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Indian tech tycoon bets $30M of his own money to build AI alternative to Microsoft Office</title>
+		<link>https://techcrunch.com/2026/07/01/indian-tech-tycoon-bets-30m-to-build-an-ai-alternative-to-microsoft-office/</link>
+		
+		<dc:creator><![CDATA[Jagmeet Singh]]></dc:creator>
+		<pubDate>Thu, 02 Jul 2026 05:30:00 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Enterprise]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[Bhavin Turakhia]]></category>
+		<category><![CDATA[microsoft office]]></category>
+		<category><![CDATA[neo]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138430</guid>
+
+					<description><![CDATA[Neo is Bhavin Turakhia’s fifth venture and his latest involving enterprise software. This time he's taking on Microsoft Office and Google Apps with AI.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Apple is reportedly planning new iPad Pro and MacBook Pro releases early next year</title>
+		<link>https://techcrunch.com/2026/07/01/apple-is-reportedly-planning-new-ipad-pro-and-macbook-pro-releases-early-next-year/</link>
+		
+		<dc:creator><![CDATA[Lucas Ropek]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 23:57:55 +0000</pubDate>
+				<category><![CDATA[Hardware]]></category>
+		<category><![CDATA[Apple]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<category><![CDATA[iPad]]></category>
+		<category><![CDATA[macbook]]></category>
+		<category><![CDATA[macbook pro]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138400</guid>
+
+					<description><![CDATA[Apple is readying several new iPad Pro tablets and a budget-friendly MacBook Pro, reports suggest.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Bending Spoons defies SaaS slump, surges 40% on first day of trading</title>
+		<link>https://techcrunch.com/2026/07/01/bending-spoons-defies-saas-slump-surges-40-on-first-day-of-trading/</link>
+		
+		<dc:creator><![CDATA[Marina Temkin]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 22:47:04 +0000</pubDate>
+				<category><![CDATA[Startups]]></category>
+		<category><![CDATA[Venture]]></category>
+		<category><![CDATA[Baillie Gifford]]></category>
+		<category><![CDATA[Bending Spoons]]></category>
+		<category><![CDATA[IPO]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138404</guid>
+
+					<description><![CDATA[The company has grown rapidly by acquiring and revamping last-generation tech brands like AOL, Eventbrite, Evernote, Meetup, and Vimeo.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>After $18B IPO, Bending Spoons founder says success comes from minimizing luck</title>
+		<link>https://techcrunch.com/2026/07/01/after-18b-ipo-bending-spoons-founder-says-success-comes-from-minimizing-luck/</link>
+		
+		<dc:creator><![CDATA[Anna Heim]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 22:28:35 +0000</pubDate>
+				<category><![CDATA[Venture]]></category>
+		<category><![CDATA[Bending Spoons]]></category>
+		<category><![CDATA[Exclusive]]></category>
+		<category><![CDATA[interview]]></category>
+		<category><![CDATA[IPO]]></category>
+		<category><![CDATA[NASDAQ]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138160</guid>
+
+					<description><![CDATA[The co-founders of Bending Spoons, the Italian company quietly buying beloved, ailing Internet brands, learned big lessons from their own startup's failure.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>WhatsApp usernames are already raising impersonation red flags</title>
+		<link>https://techcrunch.com/2026/07/01/whatsapp-usernames-are-already-raising-impersonation-red-flags/</link>
+		
+		<dc:creator><![CDATA[Jagmeet Singh]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 22:02:24 +0000</pubDate>
+				<category><![CDATA[Apps]]></category>
+		<category><![CDATA[Government & Policy]]></category>
+		<category><![CDATA[Social]]></category>
+		<category><![CDATA[Meta]]></category>
+		<category><![CDATA[WhatsApp]]></category>
+		<category><![CDATA[WhatsApp usernames]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138390</guid>
+
+					<description><![CDATA[Meta says usernames improve privacy, but critics question whether its safeguards can prevent impersonation.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Apple&#8217;s Hide My Email feature has a bug that&#8217;s been exposing real email addresses, researcher claims</title>
+		<link>https://techcrunch.com/2026/07/01/apples-hide-my-email-feature-has-a-bug-thats-been-exposing-real-email-addresses-researcher-claims/</link>
+		
+		<dc:creator><![CDATA[Lucas Ropek]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 19:18:07 +0000</pubDate>
+				<category><![CDATA[Privacy]]></category>
+		<category><![CDATA[Apple]]></category>
+		<category><![CDATA[email]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138250</guid>
+
+					<description><![CDATA[Research appears to reveal a bug that could render the feature effectively useless. ]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>SpaceX has an AI device prototype, and it sure sounds phone-ish</title>
+		<link>https://techcrunch.com/2026/07/01/spacex-has-an-ai-device-prototype-and-it-sure-sounds-phone-ish/</link>
+		
+		<dc:creator><![CDATA[Rebecca Bellan]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 18:54:18 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Gadgets]]></category>
+		<category><![CDATA[AI device]]></category>
+		<category><![CDATA[Elon Musk]]></category>
+		<category><![CDATA[SpaceX]]></category>
+		<category><![CDATA[xAI]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138299</guid>
+
+					<description><![CDATA[SpaceX reportedly showed investors a "handset-like" AI device before going public. It could be another signal SpaceX wants to expand into wireless.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Ashton Kutcher leaving Sound Ventures to launch new VC firm with Morgan Beller</title>
+		<link>https://techcrunch.com/2026/07/01/ashton-kutcher-leaving-sound-ventures-to-launch-new-vc-firm-with-morgan-beller/</link>
+		
+		<dc:creator><![CDATA[Marina Temkin]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 18:47:22 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Hardware]]></category>
+		<category><![CDATA[Venture]]></category>
+		<category><![CDATA[ai infrastructure]]></category>
+		<category><![CDATA[ashton kutcher]]></category>
+		<category><![CDATA[deep tech]]></category>
+		<category><![CDATA[Morgan Beller]]></category>
+		<category><![CDATA[NFX]]></category>
+		<category><![CDATA[sound ventures]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138300</guid>
+
+					<description><![CDATA[Sound built its reputation on concentrated, high-conviction bets in category-leading AI labs, while Kutcher's new fund appears to be chasing the layer underneath those companies — the infrastructure and energy that power them.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Neocloud Together AI raises $800M, leaps to $8.3B valuation</title>
+		<link>https://techcrunch.com/2026/07/01/neocloud-together-ai-raises-800m-leaps-to-8-3b-valuation/</link>
+		
+		<dc:creator><![CDATA[Julie Bort]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 18:29:14 +0000</pubDate>
+				<category><![CDATA[Fundraising]]></category>
+		<category><![CDATA[TC]]></category>
+		<category><![CDATA[Aramco Ventures]]></category>
+		<category><![CDATA[neocloud]]></category>
+		<category><![CDATA[Together]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138192</guid>
+
+					<description><![CDATA[The AI neocloud provider, which specializes in hosting open source models, last raised at a $3.3 billion valuation in early 2025.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Lime begins life as a public company after years of uncertainty</title>
+		<link>https://techcrunch.com/2026/07/01/lime-begins-life-as-a-public-company-after-years-of-uncertainty/</link>
+		
+		<dc:creator><![CDATA[Sean O'Kane]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 18:24:00 +0000</pubDate>
+				<category><![CDATA[Transportation]]></category>
+		<category><![CDATA[e-bikes]]></category>
+		<category><![CDATA[e-scooters]]></category>
+		<category><![CDATA[IPO]]></category>
+		<category><![CDATA[lime]]></category>
+		<category><![CDATA[micromobility]]></category>
+		<category><![CDATA[Scooters]]></category>
+		<category><![CDATA[Uber]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138144</guid>
+
+					<description><![CDATA[The nine-year-old scooter and bike-share company has said it needs the funds to help pay down around $1 billion in liabilities. ]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Cloudflare&#8217;s new policy pushes AI companies to pay for publishers&#8217; content</title>
+		<link>https://techcrunch.com/2026/07/01/cloudflares-new-policy-pushes-ai-companies-to-pay-for-publishers-content/</link>
+		
+		<dc:creator><![CDATA[Sarah Perez]]></dc:creator>
+		<pubDate>Wed, 01 Jul 2026 17:48:37 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Media & Entertainment]]></category>
+		<category><![CDATA[AI training]]></category>
+		<category><![CDATA[cloudflare]]></category>
+		<category><![CDATA[Google]]></category>
+		<category><![CDATA[publishers]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3138183</guid>
+
+					<description><![CDATA[Cloudflare is giving AI companies until September 15 to separate web crawlers used for search from those used for AI training and agents, or risk being blocked by default on many publisher sites.]]></description>
+		
+		
+		
+			</item>
+	</channel>
+</rss>

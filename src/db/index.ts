@@ -4,7 +4,12 @@ import * as schema from "./schema";
 
 export type Db = NeonHttpDatabase<typeof schema>;
 
-let dbInstance: Db | null = null;
+/**
+ * Cached on globalThis, not module scope: Next dev builds separate module
+ * graphs for pages and route handlers in one process, and two PGlite
+ * instances on one data dir don't see each other's writes.
+ */
+const globalCache = globalThis as unknown as { __inflowDb?: Db };
 
 /**
  * Driver selection: DATABASE_URL present → Neon serverless HTTP (prod/preview);
@@ -12,7 +17,8 @@ let dbInstance: Db | null = null;
  * Both expose the same Drizzle query API over the same schema.
  */
 export function getDb(): Db {
-  if (dbInstance) return dbInstance;
+  if (globalCache.__inflowDb) return globalCache.__inflowDb;
+  let dbInstance: Db;
 
   const url = process.env.DATABASE_URL;
   if (url) {
@@ -26,6 +32,7 @@ export function getDb(): Db {
     const client = new PGlite(process.env.PGLITE_DIR ?? ".pglite");
     dbInstance = drizzlePglite(client, { schema }) as unknown as Db;
   }
+  globalCache.__inflowDb = dbInstance;
   return dbInstance;
 }
 

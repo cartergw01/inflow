@@ -38,6 +38,20 @@ describe("classify", () => {
     expect(topics.length).toBeGreaterThan(1);
   });
 
+  it("does not mistake extreme weather for the Miami Heat", () => {
+    const topics = classify(
+      "As U.S. Faces Extreme Heat, Data Centers Are Ordered to Use Backup Power",
+      "As triple-digit temperatures engulf much of the United States, the administration wants grid managers to require backup power.",
+      ["us-politics"],
+    );
+    expect(topics).not.toContain("nba");
+  });
+
+  it("still recognizes city-qualified team names", () => {
+    expect(classify("Miami Heat close out the series in six", null, [])).toContain("nba");
+    expect(classify("Jazz musicians gather for New Orleans festival", null, [])).not.toContain("nba");
+  });
+
   it("does not label unrelated content with seed topics", () => {
     const topics = classify("Local bakery wins regional croissant award", null, []);
     expect(topics).not.toContain("nba");

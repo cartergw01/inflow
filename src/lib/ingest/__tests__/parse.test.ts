@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseRssFeed } from "../adapters/rss";
 import { parseHnStory, type HnStory } from "../adapters/hn";
-import { parseBlueskyFeed, type BlueskyFeedResponse } from "../adapters/bluesky";
+import { parseBlueskyFeed, stripUrls, type BlueskyFeedResponse } from "../adapters/bluesky";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "fixtures", name), "utf8");
 
@@ -85,6 +85,14 @@ describe("parseBlueskyFeed", () => {
       expect(item.publishedAt.getTime()).not.toBeNaN();
       expect(item.title.length).toBeLessThanOrEqual(141);
     }
+  });
+
+  it("strips shortlinks from post text without touching words", () => {
+    expect(stripUrls("ICC has no jurisdiction over Americans reut.rs/4eQIh9B")).toBe(
+      "ICC has no jurisdiction over Americans",
+    );
+    expect(stripUrls("Read this: https://example.com/story and more")).toBe("Read this: and more");
+    expect(stripUrls("No links here, version 2.5 shipped")).toBe("No links here, version 2.5 shipped");
   });
 
   it("escapes post text in generated HTML", () => {

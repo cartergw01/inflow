@@ -53,7 +53,7 @@ export const SOURCE_REGISTRY: RegistryEntry[] = [
 
   // ── World / general ──────────────────────────────────────────────────
   { kind: "rss", sourceClass: "news", name: "BBC World", feedUrl: "https://feeds.bbci.co.uk/news/world/rss.xml", homepageUrl: "https://www.bbc.com/news/world", topicHints: ["world"], qualityPrior: 0.85 },
-  { kind: "rss", sourceClass: "news", name: "NYT Home", feedUrl: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", homepageUrl: "https://www.nytimes.com", topicHints: ["world", "us-politics"], qualityPrior: 0.9 },
+  { kind: "rss", sourceClass: "news", name: "The New York Times", feedUrl: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", homepageUrl: "https://www.nytimes.com", topicHints: ["world", "us-politics"], qualityPrior: 0.9 },
 
   // ── Social / real-time ───────────────────────────────────────────────
   { kind: "hn", sourceClass: "social", name: "Hacker News", feedUrl: "topstories", homepageUrl: "https://news.ycombinator.com", topicHints: ["tech"], qualityPrior: 0.7 },

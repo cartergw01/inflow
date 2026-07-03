@@ -1,4 +1,3 @@
-import type { Source } from "../../../db/schema";
 import type { FetchResult, RawItem, SourceAdapter } from "../types";
 
 const HN_API = "https://hacker-news.firebaseio.com/v0";
@@ -40,7 +39,7 @@ export function parseHnStory(story: HnStory): RawItem | null {
 }
 
 export const hnAdapter: SourceAdapter = {
-  async fetch(_source: Source): Promise<FetchResult> {
+  async fetch(): Promise<FetchResult> {
     const idsRes = await fetch(`${HN_API}/topstories.json`, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });

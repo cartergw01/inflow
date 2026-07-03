@@ -30,6 +30,21 @@ function escapeHtml(text: string): string {
 }
 
 /**
+ * News accounts append shortlinks (reut.rs/…, apne.ws/…) to post text; the
+ * link itself is surfaced separately from the embed, so strip URLs from the
+ * displayed text. Words are otherwise untouched — this removes noise, not
+ * meaning.
+ */
+export function stripUrls(text: string): string {
+  return text
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\b[a-z0-9-]+\.[a-z]{2,6}\/\S+/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
+}
+
+/**
  * Pure parse step. A post's "title" is its own text (truncated for display);
  * when a post links an article, that link is surfaced in the body. Reposts
  * are skipped — we only ingest an account's own words.
@@ -40,9 +55,10 @@ export function parseBlueskyFeed(data: BlueskyFeedResponse, handle: string): Raw
     if (entry.reason) continue;
     const { post } = entry;
     if (post.author.handle !== handle) continue;
-    const text = post.record.text?.trim();
+    const rawText = post.record.text?.trim();
     const createdAt = post.record.createdAt;
-    if (!text || !createdAt) continue;
+    if (!rawText || !createdAt) continue;
+    const text = stripUrls(rawText) || rawText;
     const publishedAt = new Date(createdAt);
     if (Number.isNaN(publishedAt.getTime())) continue;
     const url = postWebUrl(post.uri, post.author.handle);

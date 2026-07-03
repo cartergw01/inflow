@@ -16,13 +16,20 @@ export const TAXONOMY: TopicRule[] = [
   {
     topic: "nba",
     strongTerms: ["nba", "wembanyama", "lebron", "giannis", "jokic", "all-nba"],
+    // Ambiguous one-word team names (heat, magic, jazz, thunder, bulls, nets,
+    // rockets, suns, spurs, kings, wizards, hornets, warriors, bucks) are
+    // deliberately excluded — they mislabel weather/economics/world news.
+    // Those teams appear here city-qualified instead.
     terms: [
-      "basketball", "lakers", "celtics", "knicks", "nets", "76ers", "sixers",
-      "bucks", "heat", "magic", "hawks", "cavaliers", "cavs", "pistons",
-      "pacers", "bulls", "raptors", "wizards", "hornets", "mavericks", "mavs",
-      "rockets", "spurs", "grizzlies", "pelicans", "thunder", "timberwolves",
-      "nuggets", "jazz", "suns", "clippers", "warriors", "trail blazers",
-      "sacramento kings", "steph curry", "luka doncic", "shai gilgeous-alexander",
+      "basketball", "lakers", "celtics", "knicks", "76ers", "sixers",
+      "cavaliers", "cavs", "pistons", "pacers", "raptors", "mavericks", "mavs",
+      "grizzlies", "pelicans", "timberwolves", "nuggets", "clippers",
+      "trail blazers", "miami heat", "orlando magic", "utah jazz",
+      "oklahoma city thunder", "okc thunder", "phoenix suns", "chicago bulls",
+      "san antonio spurs", "sacramento kings", "brooklyn nets",
+      "houston rockets", "charlotte hornets", "washington wizards",
+      "milwaukee bucks", "golden state warriors", "atlanta hawks",
+      "steph curry", "luka doncic", "shai gilgeous-alexander",
       "playoff", "all-star", "buyout market", "trade deadline",
     ],
   },

@@ -1,4 +1,3 @@
-import type { Source } from "../../../db/schema";
 import type { FetchResult, SourceAdapter } from "../types";
 
 /**
@@ -11,7 +10,7 @@ import type { FetchResult, SourceAdapter } from "../types";
  * same way the Bluesky adapter does.
  */
 export const xAdapter: SourceAdapter = {
-  async fetch(_source: Source): Promise<FetchResult> {
+  async fetch(): Promise<FetchResult> {
     if (!process.env.X_API_KEY) {
       return { items: [], notModified: true, etag: null, lastModified: null };
     }

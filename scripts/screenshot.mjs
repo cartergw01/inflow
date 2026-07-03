@@ -13,7 +13,8 @@ await page.setViewport({ width: Number(w), height: Number(h), deviceScaleFactor:
 await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: scheme }]);
 if (cookieArg) {
   const [name, value] = cookieArg.split("=");
-  await page.setCookie({ name, value, domain: "localhost", path: "/", httpOnly: true });
+  const domain = new URL(url).hostname;
+  await page.setCookie({ name, value, domain, path: "/", httpOnly: true });
 }
 await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
 await new Promise((r) => setTimeout(r, 800));

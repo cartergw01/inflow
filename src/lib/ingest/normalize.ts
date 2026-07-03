@@ -75,11 +75,23 @@ export function stripHtml(html: string): string {
 const EXCERPT_MAX = 320;
 
 /**
+ * Some feeds (ESPN's own RSS, observed live) literally serialize a missing
+ * value as the string "null" rather than omitting the tag — a bug on the
+ * publisher's end, not real content. Treat it as absent.
+ */
+const PLACEHOLDER_VALUES = new Set(["null", "undefined", "n/a"]);
+
+function isPlaceholder(text: string): boolean {
+  return PLACEHOLDER_VALUES.has(text.trim().toLowerCase());
+}
+
+/**
  * Excerpt = the publisher's own words, trimmed. Prefers the feed description;
  * falls back to the opening of the full content. Never generated text.
  */
 export function makeExcerpt(description: string | null, contentHtml: string | null): string | null {
-  const base = description?.trim() ? stripHtml(description) : contentHtml ? stripHtml(contentHtml) : "";
+  const validDescription = description?.trim() && !isPlaceholder(description) ? description : null;
+  const base = validDescription ? stripHtml(validDescription) : contentHtml ? stripHtml(contentHtml) : "";
   if (!base) return null;
   if (base.length <= EXCERPT_MAX) return base;
   const cut = base.slice(0, EXCERPT_MAX);

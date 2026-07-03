@@ -41,6 +41,11 @@ describe("makeExcerpt", () => {
     expect(makeExcerpt(null, null)).toBeNull();
     expect(makeExcerpt("  ", "")).toBeNull();
   });
+
+  it("treats a literal 'null' description as absent (observed in ESPN's live feed)", () => {
+    expect(makeExcerpt("null", null)).toBeNull();
+    expect(makeExcerpt("NULL", "<p>Fallback body text here</p>")).toBe("Fallback body text here");
+  });
 });
 
 describe("sanitizeContent", () => {

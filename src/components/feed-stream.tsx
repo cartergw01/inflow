@@ -75,7 +75,7 @@ function TitleLink({ entry, className, children }: { entry: FeedItemDTO; classNa
 
 function MetaRow({ entry, onHideSource, showAuthor = true }: { entry: FeedItemDTO; onHideSource: () => void; showAuthor?: boolean }) {
   return (
-    <div className="mt-3 flex items-baseline justify-between gap-4">
+    <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1.5">
       <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ink-faint min-w-0">
         <span className="text-ink-soft">{entry.sourceName}</span>
         {showAuthor && entry.author ? <> · {entry.author}</> : null}

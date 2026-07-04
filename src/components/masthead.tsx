@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { timeAgo } from "../lib/format";
+import { LocalDate } from "./local-date";
 import { ThemeToggle } from "./theme-toggle";
 
 /**
@@ -15,7 +16,7 @@ export function Masthead({ updatedAt }: { updatedAt?: string | null }) {
         <span className="font-display font-black text-[22px] leading-none tracking-[-0.03em]">INFLOW</span>
       </Link>
       <div className="ml-auto hidden md:flex items-center px-5 border-l border-rule-strong font-mono text-[0.65rem] tracking-[0.14em] text-ink-faint uppercase">
-        {new Date().toLocaleDateString("en-US", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
+        <LocalDate />
         {updated ? <>&nbsp;— updated {updated === "now" ? "just now" : `${updated} ago`}</> : null}
       </div>
       <nav className="flex items-stretch ml-auto md:ml-0">

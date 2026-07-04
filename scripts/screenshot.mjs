@@ -16,8 +16,10 @@ if (cookieArg) {
   const domain = new URL(url).hostname;
   await page.setCookie({ name, value, domain, path: "/", httpOnly: true });
 }
-await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
-await new Promise((r) => setTimeout(r, 800));
+// domcontentloaded + a settle delay: networkidle never fires on pages with
+// periodic beacons or slow third-party images.
+await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+await new Promise((r) => setTimeout(r, 2500));
 await page.screenshot({ path: out });
 await browser.close();
 console.log("saved", out);

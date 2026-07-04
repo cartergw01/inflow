@@ -57,7 +57,13 @@ The preview tool's screenshots degrade at non-default viewport sizes (tiny thumb
 
 Score = topic/source/author affinity (learned from signals with 14-day half-life decay) + recency (half-life varies by source class: hours for social, ~1 day for news, ~4 days for longform) + source quality prior. Then cluster-collapse (one entry per story) and same-topic/source interleaving penalties. ~10% of slots are epsilon-greedy exploration so the feed widens beyond the seed interests instead of narrowing. No dwell-maximizing objective anywhere — signals feed *relevance*, and "less like this"/hide are first-class negative signals.
 
-## Open questions
+## Redesign (2026-07-05): "Signal" direction — Swiss graphic app shell
+
+The v1 interface read as a newsletter: one centered scrolling column, no navigation, no sense of place. Three directions were mocked as real HTML and screenshotted before any code: **The Desk** (amber-on-black wire terminal with sidebar channels and a live wire column), **Signal** (Swiss international style: black/white + Klein blue #0018a8, Archivo Black headlines, full-width tab navigation, numbered story hierarchy, hard rules, no rounded corners), and **Ledger** (three-pane Reeder-style reading instrument keeping the warm paper/serif identity). Owner picked **Signal**.
+
+Why the others were rejected: The Desk was the most memorable but committed the whole product to a dark terminal personality — longform essays (a core use, Substack full-text) read like log output without a separate "calm mode" that would have split the identity in two. Ledger had the best reading comfort but was distinctive by craft, not concept — a genre (three-pane RSS reader) rather than a point of view, and closest to "template" of the three.
+
+Signal design rules now in force: category tabs are the primary navigation and the active tab is a solid blue block (always-visible "where am I"); unread items get filled blue squares and black index numbers, read items get hollow squares and grey numbers; micro-labels are mono uppercase with wide tracking; rules are 1–3px solid, corners square, shadows none; one accent color total (Klein blue light mode, brightened #4d6bff on near-black dark mode).
 
 - **X integration**: adapter is built and gated on `X_API_KEY`. Turning it on costs ~$30–75/mo at useful read volume and needs the owner's X developer account + payment method. Decide if true X discourse is worth it once the Bluesky/HN substitute has been lived with for a while.
 - **Cluster threshold (0.5)** was tuned on one day of data; watch for false merges (two different stories collapsed) and revisit — a title-token approach may eventually want entity-aware matching.

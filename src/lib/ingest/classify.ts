@@ -59,7 +59,10 @@ export const TAXONOMY: TopicRule[] = [
   },
   {
     topic: "taiwan",
-    strongTerms: ["taiwan", "taipei", "tsmc", "taiwanese", "cross-strait", "taiwan strait", "kaohsiung"],
+    strongTerms: [
+      "taiwan", "taipei", "tsmc", "taiwanese", "cross-strait", "taiwan strait",
+      "kaohsiung", "president lai", "lai ching-te",
+    ],
     terms: ["kmt", "dpp", "pla drills", "one china", "reunification", "semiconductors"],
   },
   {
@@ -76,8 +79,9 @@ export const TAXONOMY: TopicRule[] = [
     topic: "world",
     strongTerms: ["united nations", "nato", "european union"],
     terms: [
-      "ukraine", "russia", "china", "israel", "gaza", "iran", "diplomat",
-      "diplomacy", "ceasefire", "sanctions", "summit", "foreign minister",
+      "ukraine", "russia", "china", "israel", "gaza", "iran", "tehran",
+      "khamenei", "ayatollah", "diplomat", "diplomacy", "ceasefire",
+      "sanctions", "summit", "foreign minister",
     ],
   },
   {

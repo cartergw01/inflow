@@ -5,6 +5,7 @@ import {
   items,
   mutedSources,
   saves,
+  signals,
   sources,
   type Profile,
   type SourceClass,
@@ -12,6 +13,7 @@ import {
 import { rankFeed } from "./ranking/feed";
 import { affinityKey, type AffinityMap, type FeedEntry } from "./ranking/types";
 import { stripHtml } from "./ingest/normalize";
+import { CATEGORIES, type Category } from "./categories";
 
 const CANDIDATE_WINDOW_MS = 7 * 24 * 3600_000;
 const CANDIDATE_LIMIT = 500;
@@ -37,6 +39,8 @@ export interface FeedItemDTO {
   exploration: boolean;
   alsoCoveredBy: { sourceName: string; url: string }[];
   saved: boolean;
+  /** True when this profile has opened the item (read state, not impressions). */
+  read: boolean;
 }
 
 export interface FeedData {
@@ -59,7 +63,7 @@ export async function loadAffinityMap(profileId: string): Promise<AffinityMap> {
   return new Map(rows.map((r) => [affinityKey(r.dimension, r.key), { weight: r.weight, updatedAt: r.updatedAt }]));
 }
 
-function toDTO(entry: FeedEntry, savedIds: Set<number>): FeedItemDTO {
+function toDTO(entry: FeedEntry, savedIds: Set<number>, readIds: Set<number> = new Set()): FeedItemDTO {
   const { item, source } = entry;
   const hasBody = (item.contentHtml?.length ?? 0) > 500;
   const readingMinutes = hasBody
@@ -82,11 +86,50 @@ function toDTO(entry: FeedEntry, savedIds: Set<number>): FeedItemDTO {
     exploration: entry.exploration ?? false,
     alsoCoveredBy: entry.alsoCoveredBy ?? [],
     saved: savedIds.has(item.id),
+    read: readIds.has(item.id),
   };
 }
 
-/** Loads candidates, applies the profile's learned ranking, shapes for the UI. */
-export async function loadFeed(profile: Profile): Promise<FeedData> {
+/** Ids of items this profile has opened recently — the read/unread state. */
+async function loadReadIds(profileId: string): Promise<Set<number>> {
+  const db = getDb();
+  const since = new Date(Date.now() - 14 * 24 * 3600_000);
+  const rows = await db
+    .selectDistinct({ itemId: signals.itemId })
+    .from(signals)
+    .where(and(eq(signals.profileId, profileId), eq(signals.type, "open"), gte(signals.createdAt, since)));
+  return new Set(rows.map((r) => r.itemId));
+}
+
+/**
+ * "New in the last 6h" per navigation tab — a pulse, not an inbox. Deliberately
+ * not per-profile "unseen" counts (those decay to zero while you read and feel
+ * broken). Today gets no count: the aggregate is always large and means nothing.
+ */
+export async function loadTabCounts(): Promise<Record<string, number>> {
+  const db = getDb();
+  const since = new Date(Date.now() - 6 * 3600_000);
+  const rows = await db
+    .select({ topics: items.topics })
+    .from(items)
+    .where(gte(items.publishedAt, since));
+  const counts: Record<string, number> = {};
+  for (const cat of CATEGORIES) {
+    if (cat.topics.length === 0) continue; // Today: no count
+    counts[cat.slug] = Math.min(
+      rows.filter((r) => r.topics.some((t) => cat.topics.includes(t))).length,
+      99,
+    );
+  }
+  return counts;
+}
+
+/**
+ * Loads candidates, applies the profile's learned ranking, shapes for the UI.
+ * With a category, both the ranked list and the ticker are scoped to that
+ * tab's topics — same ranking engine, narrower candidate pool.
+ */
+export async function loadFeed(profile: Profile, category?: Category): Promise<FeedData> {
   const db = getDb();
   const since = new Date(Date.now() - CANDIDATE_WINDOW_MS);
 
@@ -100,7 +143,7 @@ export async function loadFeed(profile: Profile): Promise<FeedData> {
     ? and(gte(items.publishedAt, since), notInArray(items.sourceId, mutedIds))
     : gte(items.publishedAt, since);
 
-  const [candidates, affinityMap, savedRows] = await Promise.all([
+  const [allCandidates, affinityMap, savedRows, readIds] = await Promise.all([
     db
       .select({ item: items, source: sources })
       .from(items)
@@ -110,7 +153,14 @@ export async function loadFeed(profile: Profile): Promise<FeedData> {
       .limit(CANDIDATE_LIMIT),
     loadAffinityMap(profile.id),
     db.select({ itemId: saves.itemId }).from(saves).where(eq(saves.profileId, profile.id)),
+    loadReadIds(profile.id),
   ]);
+
+  const topics = category?.topics ?? [];
+  const candidates =
+    topics.length === 0
+      ? allCandidates
+      : allCandidates.filter((c) => c.item.topics.some((t) => topics.includes(t)));
 
   const savedIds = new Set(savedRows.map((s) => s.itemId));
   const now = new Date();
@@ -130,13 +180,13 @@ export async function loadFeed(profile: Profile): Promise<FeedData> {
     )
     .sort((a, b) => b.item.publishedAt.getTime() - a.item.publishedAt.getTime())
     .slice(0, LATEST_COUNT)
-    .map((c) => toDTO({ item: c.item, source: c.source, score: 0 }, savedIds));
+    .map((c) => toDTO({ item: c.item, source: c.source, score: 0 }, savedIds, readIds));
 
-  const updatedAt = candidates.length
-    ? candidates.reduce((max, c) => (c.item.fetchedAt > max ? c.item.fetchedAt : max), candidates[0].item.fetchedAt).toISOString()
+  const updatedAt = allCandidates.length
+    ? allCandidates.reduce((max, c) => (c.item.fetchedAt > max ? c.item.fetchedAt : max), allCandidates[0].item.fetchedAt).toISOString()
     : null;
 
-  return { entries: entries.map((e) => toDTO(e, savedIds)), latest, updatedAt };
+  return { entries: entries.map((e) => toDTO(e, savedIds, readIds)), latest, updatedAt };
 }
 
 /** Saved-for-later list, newest first. */

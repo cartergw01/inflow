@@ -17,8 +17,8 @@ const TOPICS: { id: string; label: string; seed?: boolean }[] = [
 ];
 
 /**
- * Fifteen seconds, once. Interests picked here only warm-start the ranking —
- * everything after is learned from reading, and these fade as learning kicks in.
+ * Fifteen seconds, once — in the design's poster voice. Interests picked here
+ * only warm-start the ranking; everything after is learned from reading.
  */
 export function Onboarding() {
   const router = useRouter();
@@ -43,6 +43,7 @@ export function Onboarding() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ interests: [...selected] }),
       });
+      router.push("/");
       router.refresh();
     } finally {
       setBusy(false);
@@ -50,51 +51,56 @@ export function Onboarding() {
   };
 
   return (
-    <main className="flex-1 flex items-center justify-center px-5">
-      <div className="max-w-md w-full py-16 text-center">
-        <h1 className="font-serif italic font-semibold text-5xl tracking-tight">
-          InFlow<span className="text-accent not-italic">.</span>
-        </h1>
-        <p className="mt-4 font-serif text-lg text-ink-soft leading-relaxed">
-          The things you need to stay informed.
-          <br />
-          Nothing more.
-        </p>
-
-        <div className="mt-10 text-left">
-          <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-ink-faint">
-            Start with what you follow
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {TOPICS.map((t) => {
-              const on = selected.has(t.id);
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => toggle(t.id)}
-                  className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-[0.8rem] transition-colors ${
-                    on
-                      ? "border-accent bg-accent-soft text-accent"
-                      : "border-rule-strong text-ink-soft hover:border-ink-faint"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-4 text-[0.75rem] leading-relaxed text-ink-faint">
-            This is a starting point, not a contract — the feed learns from what you actually read
-            and keeps adjusting.
-          </p>
+    <main className="flex-1 flex flex-col">
+      <div className="border-b-[3px] border-rule-strong px-6 sm:px-10 pt-14 pb-10">
+        <div className="flex items-center gap-3">
+          <span className="w-5 h-5 bg-accent inline-block" aria-hidden />
+          <span className="font-display font-black text-[44px] sm:text-[56px] leading-none tracking-[-0.04em]">
+            INFLOW
+          </span>
         </div>
+        <p className="mt-5 font-display font-bold text-[19px] sm:text-[22px] tracking-[-0.01em] max-w-[38ch] leading-[1.25]">
+          The things you need to stay informed. Nothing more.
+        </p>
+        <p className="mt-2 font-mono text-[0.65rem] tracking-[0.16em] uppercase text-ink-faint">
+          No ads — no engagement bait — learns from how you actually read
+        </p>
+      </div>
+
+      <div className="px-6 sm:px-10 py-8 flex-1">
+        <div className="font-mono text-[0.65rem] tracking-[0.2em] uppercase text-accent mb-4">
+          01 — Start with what you follow
+        </div>
+        <div className="flex flex-wrap gap-2.5 max-w-2xl">
+          {TOPICS.map((t) => {
+            const on = selected.has(t.id);
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => toggle(t.id)}
+                aria-pressed={on}
+                className={`cursor-pointer border-2 px-4 py-2 font-display font-bold text-[13px] tracking-[0.04em] uppercase transition-colors ${
+                  on
+                    ? "border-accent bg-accent text-accent-ink"
+                    : "border-rule-strong text-ink hover:border-accent hover:text-accent"
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-5 text-[13px] leading-relaxed text-ink-soft max-w-[56ch]">
+          A starting point, not a contract — the feed learns from what you read, skip, and save, and
+          keeps adjusting.
+        </p>
 
         <button
           type="button"
           onClick={start}
           disabled={busy}
-          className="mt-8 cursor-pointer rounded-full bg-accent text-paper font-medium text-[0.9rem] px-7 py-2.5 hover:opacity-90 transition-opacity disabled:opacity-50"
+          className="mt-9 cursor-pointer bg-ink text-paper font-display font-black text-[15px] tracking-[0.05em] uppercase px-8 py-3.5 hover:bg-accent hover:text-accent-ink transition-colors disabled:opacity-50"
         >
           {busy ? "Setting up…" : "Start reading →"}
         </button>

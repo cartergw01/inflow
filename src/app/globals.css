@@ -3,31 +3,34 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * InFlow design tokens — an editorial reading surface, not a dashboard.
- * Warm paper, near-black ink, one vermillion accent, hairline rules.
+ * InFlow "Signal" design tokens — Swiss international style.
+ * Black on white, one Klein blue accent, hard rules, square corners,
+ * mono micro-labels. See NOTES.md ("Signal direction").
  */
 :root {
-  --paper: #fbfaf7;
-  --paper-raised: #f4f2ec;
-  --ink: #191613;
-  --ink-soft: #59544b;
-  --ink-faint: #a39d92;
-  --rule: #e8e4da;
-  --rule-strong: #d5d0c4;
-  --accent: #b03a20;
-  --accent-soft: #b03a2018;
+  --paper: #ffffff;
+  --paper-raised: #f4f4f2;
+  --ink: #0a0a0a;
+  --ink-soft: #5c5c5c;
+  --ink-faint: #9a9a9a;
+  --rule: #e4e4e0;
+  --rule-strong: #0a0a0a;
+  --accent: #0018a8;
+  --accent-ink: #ffffff;
+  --accent-soft: #0018a80f;
 }
 
 .dark {
-  --paper: #141310;
-  --paper-raised: #1c1a16;
-  --ink: #eae6de;
-  --ink-soft: #a29c90;
-  --ink-faint: #6c675e;
-  --rule: #292620;
-  --rule-strong: #3a362e;
-  --accent: #e06845;
-  --accent-soft: #e0684522;
+  --paper: #0c0c0d;
+  --paper-raised: #151517;
+  --ink: #f0efec;
+  --ink-soft: #a3a3a0;
+  --ink-faint: #66666a;
+  --rule: #26262a;
+  --rule-strong: #e8e8e4;
+  --accent: #4d6bff;
+  --accent-ink: #ffffff;
+  --accent-soft: #4d6bff1a;
 }
 
 @theme inline {
@@ -39,9 +42,10 @@
   --color-rule: var(--rule);
   --color-rule-strong: var(--rule-strong);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
-  --font-serif: var(--font-newsreader), Georgia, serif;
-  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-archivo), "Helvetica Neue", sans-serif;
+  --font-sans: var(--font-archivo), "Helvetica Neue", sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
@@ -60,13 +64,26 @@ body {
 
 ::selection {
   background: var(--accent);
-  color: var(--paper);
+  color: var(--accent-ink);
 }
 
-/* Reader view typography — Newsreader at a book-like measure. */
+/* Entry animation for pane content on tab switches — quick, one-directional,
+   enough to feel navigated rather than re-rendered. */
+@keyframes pane-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.pane-in {
+  animation: pane-in 180ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pane-in { animation: none; }
+}
+
+/* Reader view typography — Archivo at a comfortable measure, Swiss rules. */
 .reader-body {
-  font-family: var(--font-serif);
-  font-size: 1.1875rem;
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
   line-height: 1.65;
   color: var(--ink);
 }
@@ -83,36 +100,34 @@ body {
 .reader-body h2,
 .reader-body h3,
 .reader-body h4 {
-  font-weight: 600;
-  line-height: 1.25;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
   margin-block: 1.6em 0.5em;
 }
-.reader-body h1 { font-size: 1.5em; }
-.reader-body h2 { font-size: 1.3em; }
-.reader-body h3 { font-size: 1.15em; }
+.reader-body h1 { font-size: 1.45em; }
+.reader-body h2 { font-size: 1.25em; }
+.reader-body h3 { font-size: 1.1em; }
 .reader-body a {
   color: var(--accent);
   text-decoration: underline;
-  text-decoration-thickness: 1px;
+  text-decoration-thickness: 1.5px;
   text-underline-offset: 2px;
 }
 .reader-body img {
   max-width: 100%;
   height: auto;
-  border-radius: 2px;
   margin-inline: auto;
 }
 .reader-body figcaption {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   color: var(--ink-faint);
-  text-align: center;
-  margin-top: 0.5em;
+  margin-top: 0.6em;
 }
 .reader-body blockquote {
-  border-left: 2px solid var(--rule-strong);
+  border-left: 3px solid var(--rule-strong);
   padding-left: 1.25em;
-  font-style: italic;
   color: var(--ink-soft);
 }
 .reader-body pre {
@@ -120,8 +135,8 @@ body {
   font-size: 0.8125rem;
   line-height: 1.55;
   background: var(--paper-raised);
+  border: 1px solid var(--rule);
   padding: 1em 1.25em;
-  border-radius: 4px;
   overflow-x: auto;
 }
 .reader-body code {
@@ -130,11 +145,11 @@ body {
 }
 .reader-body hr {
   border: 0;
-  border-top: 1px solid var(--rule);
+  border-top: 2px solid var(--rule-strong);
   margin-block: 2em;
+  width: 64px;
 }
 .reader-body table {
-  font-family: var(--font-sans);
   font-size: 0.875rem;
   border-collapse: collapse;
   width: 100%;
@@ -145,3 +160,11 @@ body {
   padding: 0.5em 0.75em;
   text-align: left;
 }
+.reader-body th {
+  font-weight: 700;
+  border-bottom: 2px solid var(--rule-strong);
+}
+
+/* Hide scrollbar on the mobile tab strip without killing scrollability. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

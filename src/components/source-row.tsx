@@ -33,7 +33,7 @@ export function SourceRow({ source }: { source: SourceWithState }) {
   return (
     <li className={`py-3.5 border-b border-rule flex items-baseline justify-between gap-4 ${muted ? "opacity-45" : ""}`}>
       <div className="min-w-0">
-        <span className="font-serif font-medium text-[1.05rem]">
+        <span className="font-display font-bold text-[15px] tracking-[-0.01em]">
           {source.homepageUrl ? (
             <a href={source.homepageUrl} target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
               {source.name}

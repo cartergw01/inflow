@@ -1,39 +1,40 @@
 import Link from "next/link";
-import { mastheadDate, timeAgo } from "../lib/format";
+import { timeAgo } from "../lib/format";
 import { ThemeToggle } from "./theme-toggle";
 
 /**
- * The daily masthead. Wordmark left, today's date center, quiet nav right —
- * a newspaper head, not an app chrome bar.
+ * The Signal masthead: identity block, date/sync line, utility cells.
+ * Every cell is rule-separated — the chrome is a grid, not a float.
  */
 export function Masthead({ updatedAt }: { updatedAt?: string | null }) {
+  const updated = updatedAt ? timeAgo(updatedAt) : null;
   return (
-    <header className="border-b border-rule">
-      <div className="mx-auto max-w-2xl px-5 py-5 flex items-baseline justify-between gap-4">
-        <Link href="/" className="shrink-0">
-          <span className="font-serif italic font-semibold text-[1.7rem] leading-none tracking-tight">
-            InFlow<span className="text-accent not-italic">.</span>
-          </span>
-        </Link>
-        <div className="hidden sm:block font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-ink-faint text-center">
-          {mastheadDate()}
-          {updatedAt ? (
-            <span className="text-ink-faint/70">
-              {" · "}
-              {timeAgo(updatedAt) === "now" ? "updated just now" : `updated ${timeAgo(updatedAt)} ago`}
-            </span>
-          ) : null}
-        </div>
-        <nav className="flex items-baseline gap-4 font-mono text-[0.6875rem] uppercase tracking-[0.14em]">
-          <Link href="/saved" className="text-ink-soft hover:text-accent transition-colors">
-            Saved
-          </Link>
-          <Link href="/sources" className="text-ink-soft hover:text-accent transition-colors">
-            Sources
-          </Link>
-          <ThemeToggle />
-        </nav>
+    <div className="flex items-stretch border-b border-rule-strong">
+      <Link href="/" className="flex items-center gap-2 px-4 sm:px-5 py-3.5 shrink-0">
+        <span className="w-3.5 h-3.5 bg-accent inline-block" aria-hidden />
+        <span className="font-display font-black text-[22px] leading-none tracking-[-0.03em]">INFLOW</span>
+      </Link>
+      <div className="ml-auto hidden md:flex items-center px-5 border-l border-rule-strong font-mono text-[0.65rem] tracking-[0.14em] text-ink-faint uppercase">
+        {new Date().toLocaleDateString("en-US", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
+        {updated ? <>&nbsp;— updated {updated === "now" ? "just now" : `${updated} ago`}</> : null}
       </div>
-    </header>
+      <nav className="flex items-stretch ml-auto md:ml-0">
+        <Link
+          href="/saved"
+          className="flex items-center px-4 sm:px-5 border-l border-rule-strong font-mono text-[0.65rem] tracking-[0.14em] uppercase text-ink hover:bg-accent hover:text-accent-ink transition-colors"
+        >
+          Saved
+        </Link>
+        <Link
+          href="/sources"
+          className="flex items-center px-4 sm:px-5 border-l border-rule-strong font-mono text-[0.65rem] tracking-[0.14em] uppercase text-ink hover:bg-accent hover:text-accent-ink transition-colors"
+        >
+          Sources
+        </Link>
+        <span className="flex items-center px-4 border-l border-rule-strong">
+          <ThemeToggle />
+        </span>
+      </nav>
+    </div>
   );
 }

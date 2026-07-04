@@ -40,36 +40,38 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
 
   return (
     <>
-      <header className="border-b border-rule">
-        <div className="mx-auto max-w-2xl px-5 py-4 flex items-baseline justify-between">
-          <Link
-            href="/"
-            className="font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-ink-soft hover:text-accent transition-colors"
-          >
-            ← Feed
-          </Link>
-          <Link href="/" className="font-serif italic font-semibold text-lg leading-none">
-            InFlow<span className="text-accent not-italic">.</span>
-          </Link>
+      <header className="sticky top-0 z-20 bg-paper flex items-stretch border-b border-rule-strong">
+        <Link
+          href="/"
+          className="flex items-center px-4 sm:px-5 py-3.5 font-mono text-[0.65rem] tracking-[0.14em] uppercase text-ink hover:bg-accent hover:text-accent-ink transition-colors"
+        >
+          ← Feed
+        </Link>
+        <Link href="/" className="ml-auto flex items-center gap-2 px-4">
+          <span className="w-3 h-3 bg-accent inline-block" aria-hidden />
+          <span className="font-display font-black text-[17px] leading-none tracking-[-0.03em]">INFLOW</span>
+        </Link>
+        <span className="flex items-center px-4 border-l border-rule-strong">
           <ThemeToggle />
-        </div>
+        </span>
       </header>
 
-      <main className="flex-1">
-        <article className="mx-auto max-w-2xl px-5 pt-10 pb-24">
+      <main className="flex-1 pane-in">
+        <article className="mx-auto max-w-[720px] px-5 sm:px-7 pt-9 pb-24">
           {profile ? <ReadTracker itemId={itemId} /> : null}
 
-          <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-accent">
-            {item.topics.map(topicLabel).join(" · ")}
+          <div className="flex items-center gap-2.5 font-mono text-[0.65rem] tracking-[0.2em] uppercase text-accent">
+            <span>{item.topics.map(topicLabel).join(" / ") || source.name}</span>
+            <span className="flex-1 h-[2px] bg-accent" aria-hidden />
           </div>
-          <h1 className="mt-3 font-serif font-semibold text-[2rem] sm:text-[2.4rem] leading-[1.1] tracking-[-0.015em]">
+          <h1 className="mt-4 font-display font-black text-[30px] sm:text-[40px] leading-[1.02] tracking-[-0.03em]">
             {item.title}
           </h1>
-          <div className="mt-4 pb-6 border-b border-rule flex flex-wrap items-baseline justify-between gap-3">
-            <div className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ink-faint">
+          <div className="mt-5 pb-5 border-b-[3px] border-rule-strong flex flex-wrap items-baseline justify-between gap-3">
+            <div className="font-mono text-[0.625rem] tracking-[0.1em] uppercase text-ink-faint">
               <span className="text-ink-soft">{source.name}</span>
-              {item.author ? <> · {item.author}</> : null}
-              <> · {fullDate(item.publishedAt.toISOString())}</>
+              {item.author ? <> — {item.author}</> : null}
+              <> — {fullDate(item.publishedAt.toISOString())}</>
             </div>
             <div className="flex items-baseline gap-4">
               {profile ? <EntryActions itemId={itemId} saved={saved} compact /> : null}
@@ -77,7 +79,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ink-faint hover:text-accent transition-colors"
+                className="font-mono text-[0.625rem] tracking-[0.1em] uppercase text-ink-faint hover:text-accent transition-colors"
               >
                 Original ↗
               </a>
@@ -87,15 +89,15 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
           {item.contentHtml ? (
             <div className="reader-body mt-8" dangerouslySetInnerHTML={{ __html: item.contentHtml }} />
           ) : (
-            <div className="mt-10 text-center">
+            <div className="mt-10">
               {item.excerpt ? (
-                <p className="font-serif text-lg leading-relaxed text-ink-soft text-left">{item.excerpt}</p>
+                <p className="text-[17px] leading-[1.6] text-ink-soft max-w-[60ch]">{item.excerpt}</p>
               ) : null}
               <a
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-10 inline-block rounded-full bg-accent text-paper font-medium text-[0.9rem] px-7 py-2.5 hover:opacity-90 transition-opacity"
+                className="mt-10 inline-block bg-ink text-paper font-display font-black text-[14px] tracking-[0.05em] uppercase px-7 py-3 hover:bg-accent hover:text-accent-ink transition-colors"
               >
                 Read at {source.name} ↗
               </a>

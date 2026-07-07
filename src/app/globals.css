@@ -168,3 +168,29 @@ body {
 /* Hide scrollbar on the mobile tab strip without killing scrollability. */
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ── Observatory (galaxy interface) ─────────────────────────────────── */
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes reader-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/*
+ * The reader overlay floats over the 3D scene and is always dark,
+ * independent of the site theme — override the token scope locally.
+ */
+.reader-body-dark {
+  --ink: #eceae4;
+  --ink-soft: #a9a7a0;
+  --ink-faint: #6d6c68;
+  --rule: #2b2d36;
+  --rule-strong: #d9d9d4;
+  --paper-raised: #14161d;
+  --accent: #8ba2ff;
+}
+

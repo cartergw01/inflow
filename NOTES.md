@@ -65,6 +65,30 @@ Why the others were rejected: The Desk was the most memorable but committed the 
 
 Signal design rules now in force: category tabs are the primary navigation and the active tab is a solid blue block (always-visible "where am I"); unread items get filled blue squares and black index numbers, read items get hollow squares and grey numbers; micro-labels are mono uppercase with wide tracking; rules are 1–3px solid, corners square, shadows none; one accent color total (Klein blue light mode, brightened #4d6bff on near-black dark mode).
 
+## The Observatory (2026-07-07): the interface is a 3D galaxy
+
+Third interface generation, replacing the Signal tab UI. One persistent Three.js scene hosts the entire product: the galaxy overview and every world interior are camera positions, never page loads. Today is the sun (your briefing orbits it); each followed topic is a world with its own construction — NBA is an amber arena with stories racing the ring plane, Tech/VC a teal circuit lattice, Taiwan a jade island with rising lanterns, US Politics a marble rotunda with two chamber arcs, World an ice-blue globe with satellites. **Orbital distance encodes learned affinity** — worlds you read drift toward the sun, so personalization is literally visible in the map.
+
+**Story-object grammar:** size = ranked relevance; halo brightness + pulse = freshness (decays over 24h; under an hour breathes); read stories collapse to dark embers with minimal halo; saved stories wear a gold ring; positions are seeded by item id so the map is stable across visits. Chosen over "planets with texture maps" because meaning had to be readable pre-attentively at 40 stories/world — luminance and scale scan faster than surface detail.
+
+**Reading transition:** the camera dives into the story's glow (620ms), a radial color wash covers the frame, and the 2D reader slides over the still-mounted, blurred scene. Closing pulls the camera back out to where you were. Article text never renders in-scene.
+
+**Signals carried over spatially:** focus held ≥1s = impression (same skip-penalty semantics), dive/link-out = open, overlay dwell = read_time, card actions = save/more/less/mute source. Verified end-to-end locally (open signal → DB → read state → ember on next load).
+
+## Galaxy performance model (why it stays smooth)
+
+- Story nodes: one InstancedMesh per world with **unlit** materials (lighting faked via color + additive halos) — no per-light cost, ~8 geometry draw calls total.
+- Halos: **billboarded instanced quads with procedural radial falloff in-shader** — one draw call per world. First attempt used gl_PointSize sprites, which cap or silently break on several ANGLE/headless stacks; instanced quads are the portable path.
+- Glow LOD: a global uniform eases 1.0 → 0.42 when inside a world — soft nebulae from orbit, tight halos up close; without it 40 fresh stories fuse into an illegible fireball (found via screenshot QA).
+- Labels are DOM nodes fed by projected positions every 3rd frame, with greedy screen-space decluttering and edge culling; no text rendered in-scene.
+- three.js is dynamically imported behind a splash so the base bundle stays lean; the render loop pauses when the tab is hidden; DPR clamped (2 desktop / 1.5 mobile) with a one-time automatic drop to 1 if sustained FPS < ~42; mobile skips antialiasing and halves the starfield. No postprocessing anywhere — additive halos read as bloom at zero pass cost.
+
+## Galaxy state & navigation
+
+Camera pose + current world persist to localStorage (every 4s and on pagehide); returning sessions wake up inside the last world with no re-flight. Worlds deep-link (`/g/taiwan`) via an optional catch-all route, with pushState/popstate keeping browser back/forward spatial. Keyboard: 1–6 jump worlds, Esc backs out (focus → world → galaxy). The Signal 2D feed was deleted; Saved/Sources remain flat dark pages; `/item/[id]` still serves deep-linked reads outside the scene.
+
+## Open questions
+
 - **X integration**: adapter is built and gated on `X_API_KEY`. Turning it on costs ~$30–75/mo at useful read volume and needs the owner's X developer account + payment method. Decide if true X discourse is worth it once the Bluesky/HN substitute has been lived with for a while.
 - **Cluster threshold (0.5)** was tuned on one day of data; watch for false merges (two different stories collapsed) and revisit — a title-token approach may eventually want entity-aware matching.
 - **Exploration rate** is fixed at every 10th slot. If the feed still narrows over weeks of real use, make it adaptive (increase when click diversity drops).

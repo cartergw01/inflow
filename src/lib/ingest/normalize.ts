@@ -68,7 +68,11 @@ const ENTITIES: Record<string, string> = {
 export function stripHtml(html: string): string {
   let text = html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<script[\s\S]*?<\/script>/gi, "");
   text = text.replace(/<[^>]+>/g, " ");
-  text = text.replace(/&[a-z]+;|&#\d+;/gi, (m) => ENTITIES[m] ?? " ");
+  // Numeric entities decode exactly (&#39; &#x27; …); named fall back to the map.
+  text = text
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&[a-z]+;/gi, (m) => ENTITIES[m] ?? " ");
   return text.replace(/\s+/g, " ").trim();
 }
 

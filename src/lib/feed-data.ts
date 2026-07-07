@@ -71,7 +71,8 @@ function toDTO(entry: FeedEntry, savedIds: Set<number>, readIds: Set<number> = n
     : null;
   return {
     id: item.id,
-    title: item.title,
+    // Legacy rows may hold entity-encoded titles; decoding is idempotent.
+    title: stripHtml(item.title),
     url: item.url,
     excerpt: item.excerpt,
     author: item.author,
@@ -187,6 +188,102 @@ export async function loadFeed(profile: Profile, category?: Category): Promise<F
     : null;
 
   return { entries: entries.map((e) => toDTO(e, savedIds, readIds)), latest, updatedAt };
+}
+
+export interface WorldData {
+  slug: string;
+  label: string;
+  /** Normalized learned affinity 0..1 — drives orbital distance in the galaxy. */
+  affinity: number;
+  newCount: number;
+  entries: FeedItemDTO[];
+}
+
+export interface GalaxyData {
+  worlds: WorldData[];
+  /** The Today briefing — the sun at the center. */
+  today: WorldData;
+  updatedAt: string | null;
+}
+
+const WORLD_ENTRY_LIMIT = 40;
+
+/**
+ * Everything the galaxy renders, in one payload: one candidate fetch, then
+ * the same pure ranking engine run once per world over its topic-scoped
+ * subset. Affinity per world is the profile's decayed topic weights summed
+ * and squashed — it moves worlds closer to the sun as you read them.
+ */
+export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
+  const db = getDb();
+  const since = new Date(Date.now() - CANDIDATE_WINDOW_MS);
+
+  const muted = await db
+    .select({ sourceId: mutedSources.sourceId })
+    .from(mutedSources)
+    .where(eq(mutedSources.profileId, profile.id));
+  const mutedIds = muted.map((m) => m.sourceId);
+  const candidateWhere = mutedIds.length
+    ? and(gte(items.publishedAt, since), notInArray(items.sourceId, mutedIds))
+    : gte(items.publishedAt, since);
+
+  const [candidates, affinityMap, savedRows, readIds] = await Promise.all([
+    db
+      .select({ item: items, source: sources })
+      .from(items)
+      .innerJoin(sources, eq(items.sourceId, sources.id))
+      .where(candidateWhere)
+      .orderBy(desc(items.publishedAt))
+      .limit(CANDIDATE_LIMIT),
+    loadAffinityMap(profile.id),
+    db.select({ itemId: saves.itemId }).from(saves).where(eq(saves.profileId, profile.id)),
+    loadReadIds(profile.id),
+  ]);
+
+  const savedIds = new Set(savedRows.map((s) => s.itemId));
+  const now = new Date();
+  const dayAgo = now.getTime() - 24 * 3600_000;
+
+  const buildWorld = (cat: Category): WorldData => {
+    const scoped =
+      cat.topics.length === 0
+        ? candidates
+        : candidates.filter((c) => c.item.topics.some((t) => cat.topics.includes(t)));
+    const entries = rankFeed({
+      candidates: scoped,
+      affinities: affinityMap,
+      seedInterests: profile.interests,
+      now,
+      opts: { limit: WORLD_ENTRY_LIMIT },
+    }).map((e) => toDTO(e, savedIds, readIds));
+    const weight = cat.topics.reduce((sum, t) => {
+      const entry = affinityMap.get(affinityKey("topic", t));
+      return sum + Math.max(0, entry?.weight ?? 0);
+    }, 0);
+    return {
+      slug: cat.slug,
+      label: cat.label,
+      affinity: Math.tanh(weight / 6),
+      // Count within the ranked set the user will actually see, not the
+      // whole candidate pool — "40 stories · 197 new" reads as a bug.
+      newCount: entries.filter((e) => new Date(e.publishedAt).getTime() > dayAgo).length,
+      entries,
+    };
+  };
+
+  const [todayCat, ...worldCats] = CATEGORIES;
+  const updatedAt = candidates.length
+    ? candidates
+        .reduce((max, c) => (c.item.fetchedAt > max ? c.item.fetchedAt : max), candidates[0].item.fetchedAt)
+        .toISOString()
+    : null;
+
+  const today = buildWorld(todayCat);
+  return {
+    today: { ...today, entries: today.entries.slice(0, 14) },
+    worlds: worldCats.map(buildWorld),
+    updatedAt,
+  };
 }
 
 /** Saved-for-later list, newest first. */

@@ -3,7 +3,7 @@ import { getDb, type Db } from "../../db";
 import { clusters, items, sources, type NewItem, type Source, type SourceKind } from "../../db/schema";
 import { SOURCE_REGISTRY } from "./registry";
 import { classify } from "./classify";
-import { canonicalizeUrl, makeExcerpt, sanitizeContent } from "./normalize";
+import { canonicalizeUrl, makeExcerpt, sanitizeContent, stripHtml } from "./normalize";
 import { clusterKey, findClusterMatch, type Clusterable } from "./cluster";
 import { rssAdapter } from "./adapters/rss";
 import { hnAdapter } from "./adapters/hn";
@@ -77,7 +77,8 @@ function toNewItem(raw: RawItem, source: Source, now: Date): NewItem | null {
     sourceId: source.id,
     guid: raw.guid,
     author: raw.author,
-    title: raw.title,
+    // Some feeds (Yahoo) leave titles entity-encoded; stripHtml decodes.
+    title: stripHtml(raw.title),
     url: raw.url,
     canonicalUrl: canonicalizeUrl(raw.url),
     excerpt,

@@ -22,13 +22,17 @@ const H = 3600_000;
  * Galaxy activity 0..1: recency-weighted story mass. A story counts fully
  * when new and decays with a 24h half-life, so a galaxy swells on a busy
  * news day and shrinks back over the following days.
+ *
+ * Computed over the UNCAPPED candidate pool, not the ranked top-40 —
+ * the cap made every galaxy read ~1.0 on a normal day (found live: all
+ * activities were 0.94–0.99 and size stopped meaning anything).
  */
-export function activityIndex(stories: { publishedAt: string }[], now = Date.now()): number {
+export function activityIndex(stories: { publishedAt: string | Date }[], now = Date.now()): number {
   const mass = stories.reduce((sum, s) => {
     const ageH = Math.max(0, (now - new Date(s.publishedAt).getTime()) / H);
     return sum + Math.pow(2, -ageH / 24);
   }, 0);
-  return Math.tanh(mass / 14);
+  return Math.tanh(mass / 40);
 }
 
 /**

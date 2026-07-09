@@ -269,7 +269,8 @@ export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
       slug: cat.slug,
       label: cat.label,
       affinity: Math.tanh(weight / 6),
-      activity: activityIndex(entries, now.getTime()),
+      // Uncapped pool: the ranked-40 cap saturates the index (see metrics.ts).
+      activity: activityIndex(scoped.map((c) => ({ publishedAt: c.item.publishedAt })), now.getTime()),
       breaking: isBreaking(entries, now.getTime()),
       // Count within the ranked set the user will actually see, not the
       // whole candidate pool — "40 stories · 197 new" reads as a bug.

@@ -92,6 +92,42 @@ const WHITE = new THREE.Color(0xffffff);
 const EMBER = new THREE.Color(0x272a34);
 const TAU = Math.PI * 2;
 const GALAXY_BACKDROP_URL = "/images/inflow-spiral-galaxy.png";
+const CORE_TEXTURE_ATLAS_URL = "/images/inflow-celestial-core-atlas.png";
+const STORY_STAR_SPRITE_URL = "/images/inflow-story-star-sprite.png";
+
+type CoreTextureKey = WorldVisual["core"];
+
+const CORE_TEXTURE_TILES: Record<CoreTextureKey, [number, number]> = {
+  sun: [0, 0],
+  arena: [1, 0],
+  lattice: [2, 0],
+  isle: [0, 1],
+  rotunda: [1, 1],
+  globe: [2, 1],
+};
+
+function makeFallbackGlowTexture() {
+  const size = 48;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x + 0.5) / size - 0.5;
+      const dy = (y + 0.5) / size - 0.5;
+      const d = Math.hypot(dx, dy) * 2;
+      const ray = Math.max(Math.abs(dx), Math.abs(dy)) * 1.8;
+      const core = Math.max(0, 1 - d);
+      const v = Math.min(255, Math.round((Math.pow(core, 2.4) + Math.pow(Math.max(0, 1 - ray), 5) * 0.35) * 255));
+      const i = (y * size + x) * 4;
+      data[i] = v;
+      data[i + 1] = v;
+      data[i + 2] = v;
+      data[i + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.needsUpdate = true;
+  return texture;
+}
 
 /* Halos: view-aligned instanced quads, procedural falloff — one draw call
  * per galaxy. (gl_PointSize sprites cap or break on several ANGLE stacks.) */
@@ -119,13 +155,24 @@ const GLOW_FRAG = `
 varying vec2 vUv;
 varying vec3 vTint;
 varying float vFresh;
+uniform sampler2D uSprite;
 void main() {
+  vec2 uv = vUv * 0.5 + 0.5;
+  vec3 sprite = texture2D(uSprite, uv).rgb;
+  float spriteLum = dot(sprite, vec3(0.2126, 0.7152, 0.0722));
   float d = length(vUv) * 2.0;
-  float a = pow(max(0.0, 1.0 - d), 2.0);
-  gl_FragColor = vec4(vTint * (0.7 + vFresh * 0.4), a);
+  float radial = pow(max(0.0, 1.0 - d), 2.2);
+  float core = smoothstep(0.04, 0.82, spriteLum);
+  float rays = smoothstep(0.015, 0.38, spriteLum) * (1.0 - smoothstep(0.72, 1.18, d));
+  float a = max(radial * 0.18, max(core, rays * 0.64)) * (0.7 + vFresh * 0.24);
+  vec3 spectral = mix(vTint, sprite * (0.82 + vFresh * 0.28), min(0.72, spriteLum * 0.9));
+  gl_FragColor = vec4(spectral, a);
 }`;
 
-function makeGlowMesh(count: number, uniforms: { uTime: { value: number }; uGlowScale: { value: number } }) {
+function makeGlowMesh(
+  count: number,
+  uniforms: { uTime: { value: number }; uGlowScale: { value: number }; uSprite: { value: THREE.Texture } },
+) {
   const base = new THREE.PlaneGeometry(1, 1);
   const geo = new THREE.InstancedBufferGeometry();
   geo.index = base.index;
@@ -182,10 +229,18 @@ export class GalaxyEngine {
   private cb: EngineCallbacks;
   private isMobile: boolean;
   private backdropTexture: THREE.Texture | null = null;
+  private ownedTextures: THREE.Texture[] = [];
+  private coreTextures = new Map<CoreTextureKey, THREE.Texture>();
+  private coreMaterials: { key: CoreTextureKey; material: THREE.MeshBasicMaterial }[] = [];
 
   private worldGroups = new Map<string, THREE.Group>();
   private worldScales = new Map<string, number>();
-  private glowUniforms = { uTime: { value: 0 }, uGlowScale: { value: 1 } };
+  private fallbackGlowTexture = makeFallbackGlowTexture();
+  private glowUniforms: { uTime: { value: number }; uGlowScale: { value: number }; uSprite: { value: THREE.Texture } } = {
+    uTime: { value: 0 },
+    uGlowScale: { value: 1 },
+    uSprite: { value: this.fallbackGlowTexture },
+  };
   private glows = new Map<string, ReturnType<typeof makeGlowMesh>>();
   private instanced = new Map<string, THREE.InstancedMesh>();
   private hitTargets: THREE.Mesh[] = [];
@@ -238,6 +293,8 @@ export class GalaxyEngine {
     this.scene.fog = new THREE.FogExp2(0x030407, 0.006);
 
     this.loadGalaxyBackdrop();
+    this.loadCoreTextureAtlas();
+    this.loadStoryStarSprite();
     this.buildGalacticDisc();
     this.buildStarfield();
     this.buildEcliptic();
@@ -284,6 +341,84 @@ export class GalaxyEngine {
       this.backdropTexture = texture;
       this.scene.background = texture;
     });
+  }
+
+  private loadStoryStarSprite() {
+    const loader = new THREE.TextureLoader();
+    loader.load(STORY_STAR_SPRITE_URL, (texture) => {
+      if (this.disposed) {
+        texture.dispose();
+        return;
+      }
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      this.ownedTextures.push(texture);
+      this.glowUniforms.uSprite.value = texture;
+    });
+  }
+
+  private loadCoreTextureAtlas() {
+    const loader = new THREE.TextureLoader();
+    loader.load(CORE_TEXTURE_ATLAS_URL, (atlas) => {
+      if (this.disposed) {
+        atlas.dispose();
+        return;
+      }
+      const image = atlas.image as HTMLImageElement;
+      for (const [key, tile] of Object.entries(CORE_TEXTURE_TILES) as [CoreTextureKey, [number, number]][]) {
+        const texture = this.cropAtlasTile(image, tile[0], tile[1]);
+        this.coreTextures.set(key, texture);
+        this.ownedTextures.push(texture);
+      }
+      atlas.dispose();
+      this.applyCoreTextures();
+    });
+  }
+
+  private cropAtlasTile(image: HTMLImageElement, col: number, row: number) {
+    const cols = 3;
+    const rows = 2;
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const tileW = Math.floor(width / cols);
+    const tileH = Math.floor(height / rows);
+    const canvas = document.createElement("canvas");
+    canvas.width = tileW;
+    canvas.height = tileH;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(image, col * tileW, row * tileH, tileW, tileH, 0, 0, tileW, tileH);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private registerCoreMaterial(key: CoreTextureKey, material: THREE.MeshBasicMaterial) {
+    this.coreMaterials.push({ key, material });
+    const texture = this.coreTextures.get(key);
+    if (texture) this.applyCoreTexture(material, texture);
+  }
+
+  private applyCoreTextures() {
+    for (const { key, material } of this.coreMaterials) {
+      const texture = this.coreTextures.get(key);
+      if (texture) this.applyCoreTexture(material, texture);
+    }
+  }
+
+  private applyCoreTexture(material: THREE.MeshBasicMaterial, texture: THREE.Texture) {
+    material.map = texture;
+    material.color.setHex(0xffffff);
+    material.needsUpdate = true;
   }
 
   /** A quiet spiral-disk star bed so the Observatory reads as a galaxy, not a solar map. */
@@ -365,10 +500,12 @@ export class GalaxyEngine {
   }
 
   private buildCore(visual: WorldVisual, group: THREE.Group, scale: number, breaking: boolean) {
-    const mk = (geo: THREE.BufferGeometry, color: number, opacity = 1) => {
+    const mk = (geo: THREE.BufferGeometry, color: number, opacity = 1, textureKey?: CoreTextureKey) => {
+      const material = new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
+      if (textureKey) this.registerCoreMaterial(textureKey, material);
       const m = new THREE.Mesh(
         geo,
-        new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 }),
+        material,
       );
       group.add(m);
       return m;
@@ -376,16 +513,21 @@ export class GalaxyEngine {
 
     switch (visual.core) {
       case "sun":
-        mk(new THREE.SphereGeometry(1.7, 40, 40), 0xf0e2b0);
+        mk(new THREE.SphereGeometry(1.7, 48, 48), 0xf0e2b0, 1, "sun");
+        for (const r of [2.15, 2.55, 3.1]) {
+          const ring = thinRing(r - 0.018, r + 0.018, 0xf0d590, 0.18);
+          ring.rotation.x = Math.PI / 2;
+          group.add(ring);
+        }
         break;
       case "arena": {
-        mk(new THREE.SphereGeometry(1.1 * scale, 28, 28), 0x3a2413);
+        mk(new THREE.SphereGeometry(1.1 * scale, 36, 36), 0x3a2413, 1, "arena");
         const ring = mk(new THREE.RingGeometry(2.6 * scale, 3.1 * scale, 96), visual.color, 0.2);
         ring.rotation.x = Math.PI / 2 - 0.42;
         break;
       }
       case "lattice": {
-        const ico = mk(new THREE.IcosahedronGeometry(1.15 * scale, 0), 0x0d3a30);
+        const ico = mk(new THREE.IcosahedronGeometry(1.15 * scale, 1), 0x0d3a30, 1, "lattice");
         ico.add(
           new THREE.Mesh(
             new THREE.IcosahedronGeometry(1.16 * scale, 0),
@@ -395,16 +537,16 @@ export class GalaxyEngine {
         break;
       }
       case "isle":
-        mk(new THREE.SphereGeometry(1.15 * scale, 28, 28), 0x11402a);
+        mk(new THREE.SphereGeometry(1.15 * scale, 36, 36), 0x11402a, 1, "isle");
         break;
       case "rotunda": {
-        mk(new THREE.SphereGeometry(1.05 * scale, 28, 28, 0, Math.PI * 2, 0, Math.PI / 2), 0xb9c4e8);
-        const base = mk(new THREE.CylinderGeometry(1.05 * scale, 1.05 * scale, 0.2 * scale, 32), 0x232c58);
+        mk(new THREE.SphereGeometry(1.05 * scale, 36, 36, 0, Math.PI * 2, 0, Math.PI / 2), 0xb9c4e8, 1, "rotunda");
+        const base = mk(new THREE.CylinderGeometry(1.05 * scale, 1.05 * scale, 0.2 * scale, 40), 0x232c58, 1, "rotunda");
         base.position.y = -0.02;
         break;
       }
       case "globe":
-        mk(new THREE.SphereGeometry(1.15 * scale, 28, 28), 0x2c3b55);
+        mk(new THREE.SphereGeometry(1.15 * scale, 40, 40), 0x2c3b55, 1, "globe");
         break;
     }
 
@@ -444,8 +586,8 @@ export class GalaxyEngine {
 
     const n = world.entries.length;
     const count = n + 1;
-    const geo = new THREE.SphereGeometry(1, 12, 12);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const geo = new THREE.IcosahedronGeometry(1, 1);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.58, depthWrite: false });
     const mesh = new THREE.InstancedMesh(geo, mat, Math.max(n, 1));
     mesh.userData.world = world.slug;
     group.add(mesh);
@@ -475,7 +617,7 @@ export class GalaxyEngine {
       const fresh = story.read ? 0 : Math.max(0, 1 - ageH / 24);
       glow.offset.setXYZ(i, p.x, p.y, p.z);
       glow.tint.setXYZ(i, tint.r, tint.g, tint.b);
-      glow.size.setX(i, size * (story.read ? 2.2 : 3.5 + fresh * 3));
+      glow.size.setX(i, size * (story.read ? 1.8 : 2.75 + fresh * 2.35));
       glow.fresh.setX(i, fresh > 0.85 ? 1 : 0);
 
       this.stories.set(story.id, { story, world: world.slug, index: i, local: p });
@@ -660,7 +802,7 @@ export class GalaxyEngine {
       group.add(ring);
       const satellites: THREE.Mesh[] = [];
       for (let i = 0; i < k; i++) {
-        const sat = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshBasicMaterial({ color: 0xdde6f2 }));
+        const sat = new THREE.Mesh(new THREE.OctahedronGeometry(0.07, 0), new THREE.MeshBasicMaterial({ color: 0xdde6f2 }));
         group.add(sat);
         satellites.push(sat);
       }
@@ -728,7 +870,7 @@ export class GalaxyEngine {
     mesh.setColorAt(ref.index, EMBER);
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     const glow = this.glows.get(ref.world)!;
-    glow.size.setX(ref.index, this.storySize(ref.index) * 2.2);
+    glow.size.setX(ref.index, this.storySize(ref.index) * 1.8);
     glow.fresh.setX(ref.index, 0);
     glow.tint.setXYZ(ref.index, EMBER.r, EMBER.g, EMBER.b);
     glow.size.needsUpdate = true;
@@ -962,6 +1104,8 @@ export class GalaxyEngine {
     this.disposed = true;
     removeEventListener("resize", this.onResize);
     this.backdropTexture?.dispose();
+    this.fallbackGlowTexture.dispose();
+    for (const texture of this.ownedTextures) texture.dispose();
     this.renderer.dispose();
   }
 }

@@ -58,9 +58,9 @@ export function WarpBar({
   };
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[3px] flex justify-center pt-[12vh] px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-40 bg-black/[0.56] backdrop-blur-[5px] flex justify-center pt-[12vh] px-4" onClick={onClose}>
       <div
-        className="w-full max-w-[520px] h-fit bg-[#080a12]/95 border border-[#2a2f42] animate-[card-in_140ms_ease-out]"
+        className="w-full max-w-[520px] h-fit bg-[#080a12]/95 border border-[#2a2f42] shadow-[0_28px_90px_rgba(0,0,0,0.54)] animate-[card-in_140ms_ease-out]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2a2f42]">

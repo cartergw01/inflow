@@ -51,8 +51,8 @@ export function Onboarding() {
   };
 
   return (
-    <main className="flex-1 flex flex-col">
-      <div className="border-b-[3px] border-rule-strong px-6 sm:px-10 pt-14 pb-10">
+    <main className="space-shell dark flex-1 flex flex-col text-white">
+      <div className="border-b-[3px] border-rule-strong bg-black/[0.18] px-6 sm:px-10 pt-14 pb-10 backdrop-blur-[2px]">
         <div className="flex items-center gap-3">
           <span className="w-5 h-5 bg-accent inline-block" aria-hidden />
           <span className="font-display font-black text-[44px] sm:text-[56px] leading-none tracking-[-0.04em]">

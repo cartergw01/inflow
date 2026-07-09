@@ -90,6 +90,8 @@ const EASE = (t: number) => 1 - Math.pow(1 - t, 3);
 const TMP = new THREE.Vector3();
 const WHITE = new THREE.Color(0xffffff);
 const EMBER = new THREE.Color(0x272a34);
+const TAU = Math.PI * 2;
+const GALAXY_BACKDROP_URL = "/images/inflow-spiral-galaxy.png";
 
 /* Halos: view-aligned instanced quads, procedural falloff — one draw call
  * per galaxy. (gl_PointSize sprites cap or break on several ANGLE stacks.) */
@@ -179,6 +181,7 @@ export class GalaxyEngine {
   private camera: THREE.PerspectiveCamera;
   private cb: EngineCallbacks;
   private isMobile: boolean;
+  private backdropTexture: THREE.Texture | null = null;
 
   private worldGroups = new Map<string, THREE.Group>();
   private worldScales = new Map<string, number>();
@@ -234,6 +237,8 @@ export class GalaxyEngine {
     this.camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 500);
     this.scene.fog = new THREE.FogExp2(0x030407, 0.006);
 
+    this.loadGalaxyBackdrop();
+    this.buildGalacticDisc();
     this.buildStarfield();
     this.buildEcliptic();
     this.buildWorld(data.today, VISUALS_BY_SLUG.get("today")!);
@@ -266,8 +271,74 @@ export class GalaxyEngine {
 
   /* ── construction ──────────────────────────────────────────────── */
 
+  private loadGalaxyBackdrop() {
+    const loader = new THREE.TextureLoader();
+    loader.load(GALAXY_BACKDROP_URL, (texture) => {
+      if (this.disposed) {
+        texture.dispose();
+        return;
+      }
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      this.backdropTexture = texture;
+      this.scene.background = texture;
+    });
+  }
+
+  /** A quiet spiral-disk star bed so the Observatory reads as a galaxy, not a solar map. */
+  private buildGalacticDisc() {
+    const n = this.isMobile ? 2200 : 5200;
+    const pos = new Float32Array(n * 3);
+    const colors = new Float32Array(n * 3);
+    const core = new THREE.Color(0xffe4bd);
+    const arm = new THREE.Color(0x8ea8dd);
+    const violet = new THREE.Color(0x7b6bb6);
+    const color = new THREE.Color();
+
+    for (let i = 0; i < n; i++) {
+      const u = seeded(i + 1, 101);
+      const radius = 2.5 + Math.pow(u, 1.85) * 74;
+      const armIndex = Math.floor(seeded(i + 1, 103) * 4);
+      const spiral = armIndex * (TAU / 4) + radius * 0.255;
+      const spread = 0.24 + radius * 0.018;
+      const angle = spiral + (seeded(i + 1, 107) - 0.5) * spread * 3.2;
+      const lane = (seeded(i + 1, 109) - 0.5) * (0.7 + radius * 0.016);
+
+      pos[i * 3] = Math.cos(angle) * (radius + lane);
+      pos[i * 3 + 1] = (seeded(i + 1, 113) - 0.5) * (0.9 + radius * 0.018);
+      pos[i * 3 + 2] = Math.sin(angle) * (radius + lane);
+
+      const mix = Math.min(1, radius / 48);
+      color.lerpColors(core, seeded(i + 1, 127) > 0.82 ? violet : arm, mix);
+      const falloff = 0.45 + Math.max(0, 1 - radius / 82) * 0.5;
+      colors[i * 3] = color.r * falloff;
+      colors[i * 3 + 1] = color.g * falloff;
+      colors[i * 3 + 2] = color.b * falloff;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({
+      size: this.isMobile ? 0.16 : 0.13,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.72,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    });
+    const disc = new THREE.Points(geometry, material);
+    disc.rotation.y = -0.35;
+    disc.renderOrder = -10;
+    disc.frustumCulled = false;
+    this.scene.add(disc);
+  }
+
   private buildStarfield() {
-    const n = this.isMobile ? 1400 : 3200;
+    const n = this.isMobile ? 1200 : 2600;
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const r = 150 + Math.random() * 220;
@@ -280,7 +351,7 @@ export class GalaxyEngine {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     this.scene.add(
-      new THREE.Points(g, new THREE.PointsMaterial({ color: 0x6b7290, size: 0.22, transparent: true, opacity: 0.5, fog: false })),
+      new THREE.Points(g, new THREE.PointsMaterial({ color: 0x77809f, size: 0.2, transparent: true, opacity: 0.46, fog: false })),
     );
   }
 
@@ -890,6 +961,7 @@ export class GalaxyEngine {
   dispose() {
     this.disposed = true;
     removeEventListener("resize", this.onResize);
+    this.backdropTexture?.dispose();
     this.renderer.dispose();
   }
 }

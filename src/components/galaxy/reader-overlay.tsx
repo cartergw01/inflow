@@ -76,9 +76,9 @@ export function ReaderOverlay({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-center overflow-y-auto bg-black/55 backdrop-blur-[6px] animate-[reader-in_260ms_ease-out]">
-      <article className="w-full max-w-[760px] min-h-full bg-[#0a0b10] border-x border-white/10 px-6 sm:px-10 pt-6 pb-24">
-        <div className="flex items-center justify-between sticky top-0 bg-[#0a0b10] py-3 border-b border-white/10 z-10">
+    <div className="fixed inset-0 z-40 flex justify-center overflow-y-auto bg-black/[0.62] backdrop-blur-[8px] animate-[reader-in_260ms_ease-out]">
+      <article className="w-full max-w-[760px] min-h-full bg-[#0a0b10]/[0.96] border-x border-white/10 shadow-[0_0_120px_rgba(0,0,0,0.55)] px-6 sm:px-10 pt-6 pb-24">
+        <div className="flex items-center justify-between sticky top-0 bg-[#0a0b10]/[0.96] backdrop-blur-md py-3 border-b border-white/10 z-10">
           <button
             type="button"
             onClick={close}

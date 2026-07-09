@@ -21,8 +21,8 @@ export default async function SourcesPage() {
   const sources = await loadSources(profile);
 
   return (
-    <div className="min-h-screen bg-[#04040a] text-white dark">
-      <header className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+    <div className="space-shell min-h-screen bg-[#04040a] text-white dark">
+      <header className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-black/[0.18] backdrop-blur-md">
         <Link
           href="/"
           className="font-mono text-[0.65rem] tracking-[0.16em] uppercase text-white/55 hover:text-white transition-colors"

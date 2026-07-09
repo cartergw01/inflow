@@ -171,6 +171,49 @@ body {
 
 /* ── Observatory (galaxy interface) ─────────────────────────────────── */
 
+.observatory-shell {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(126, 148, 232, 0.16), transparent 34%),
+    #04040a url("/images/inflow-spiral-galaxy.png") center / cover no-repeat;
+}
+
+.space-shell {
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+  background: #04040a;
+}
+
+.space-shell::before,
+.space-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.space-shell::before {
+  background:
+    linear-gradient(90deg, rgba(4, 4, 10, 0.76), rgba(4, 4, 10, 0.3) 42%, rgba(4, 4, 10, 0.84)),
+    url("/images/inflow-spiral-galaxy.png") center / cover no-repeat;
+  filter: saturate(0.9) brightness(0.62);
+  opacity: 0.42;
+  transform: scale(1.02);
+}
+
+.space-shell::after {
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 226, 188, 0.14), transparent 24rem),
+    radial-gradient(circle at 22% 72%, rgba(77, 107, 255, 0.12), transparent 22rem),
+    linear-gradient(180deg, rgba(4, 4, 10, 0.62), #04040a 76%);
+}
+
+.space-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
 @keyframes card-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
@@ -193,4 +236,3 @@ body {
   --paper-raised: #14161d;
   --accent: #8ba2ff;
 }
-

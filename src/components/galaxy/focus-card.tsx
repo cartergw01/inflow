@@ -52,10 +52,10 @@ export function FocusCard({
 
   return (
     <div
-      className="fixed z-30 border backdrop-blur-md animate-[card-in_180ms_ease-out] pointer-events-auto"
+      className="fixed z-30 border backdrop-blur-md shadow-[0_28px_90px_rgba(0,0,0,0.55)] animate-[card-in_180ms_ease-out] pointer-events-auto"
       style={{
         ...style,
-        background: "rgba(8,10,16,0.85)",
+        background: "linear-gradient(180deg, rgba(13,16,28,0.92), rgba(7,8,14,0.88))",
         borderColor: `${accent}55`,
         borderLeft: `3px solid ${accent}`,
         padding: "16px 18px 14px",

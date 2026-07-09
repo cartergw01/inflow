@@ -215,7 +215,7 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
   const totalStories = data ? data.worlds.reduce((a, w) => a + w.entries.length, 0) + data.today.entries.length : 0;
 
   return (
-    <div className="fixed inset-0 bg-[#04040a] text-white overflow-hidden">
+    <div className="observatory-shell fixed inset-0 bg-[#04040a] text-white overflow-hidden">
       <canvas ref={canvasRef} className="absolute inset-0 touch-none" />
 
       {/* labels layer */}
@@ -291,7 +291,7 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
         <button
           type="button"
           onClick={openWarp}
-          className="pointer-events-auto cursor-pointer hidden md:flex items-center gap-2.5 border border-[#2a2f42] bg-[#080a12]/70 px-4 py-2 w-[300px] hover:border-[#3d445e] transition-colors"
+          className="pointer-events-auto cursor-pointer hidden md:flex items-center gap-2.5 border border-[#2a2f42] bg-[#080a12]/[0.76] px-4 py-2 w-[300px] backdrop-blur-md shadow-[0_16px_52px_rgba(0,0,0,0.32)] hover:border-[#56607e] hover:bg-[#101421]/[0.82] transition-colors"
           aria-label="Warp search"
         >
           <span className="text-[#565d78] text-[11px]" aria-hidden>⌕</span>
@@ -410,7 +410,7 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
 
       {/* splash / error */}
       {status !== "ready" ? (
-        <div className="absolute inset-0 bg-[#04040a] flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-[#04040a]/[0.84] backdrop-blur-sm flex items-center justify-center z-50">
           <div className="text-center">
             <div className="flex items-center justify-center gap-2.5">
               <span className="w-3.5 h-3.5 bg-[#6b8cff] inline-block animate-pulse" aria-hidden />

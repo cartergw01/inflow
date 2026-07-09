@@ -1,14 +1,24 @@
 /**
- * World visual identities. Each world is a place: its own palette, core
- * geometry, and story-layout formation — not a recolored template.
- * Layouts are pure and deterministic (seeded by item id) so the map is
- * stable across visits; rank still drives size/ordering.
+ * Galaxy visual identities. Each galaxy is a place: its own palette, core
+ * construction, orbital-lane arrangement, and story formation — not a
+ * recolored template. v2 palette is desaturated toward astronomical-
+ * instrument restraint (Stellarium, not sci-fi). Layouts are pure and
+ * deterministic (seeded by item id) so the map is stable across visits;
+ * rank still drives size/ordering.
  */
 
 export interface Vec3 {
   x: number;
   y: number;
   z: number;
+}
+
+export interface Lane {
+  /** Lane radius before activity scaling. */
+  r: number;
+  /** Tilt from the horizontal plane (radians). */
+  tiltX: number;
+  tiltZ?: number;
 }
 
 export interface WorldVisual {
@@ -25,10 +35,10 @@ export interface WorldVisual {
   core: "sun" | "arena" | "lattice" | "isle" | "rotunda" | "globe";
   /** Fixed bearing on the galactic plane (radians) — a stable mental map. */
   angle: number;
+  /** Thin orbital reference lanes (astronomical chart feel). */
+  lanes: Lane[];
   /** Story formation. index = rank (0 = most relevant). */
   layout: (index: number, seed: number) => Vec3;
-  /** Ambient motion style applied by the engine. */
-  motion: "orbit-fast" | "orbit-slow" | "rise" | "shimmer" | "still";
 }
 
 /** Deterministic 0..1 from item id + salt — keeps layouts stable. */
@@ -41,57 +51,64 @@ export function seeded(id: number, salt: number): number {
 }
 
 const TAU = Math.PI * 2;
+const ARENA_TILT = 0.42;
 
 export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "today",
     label: "Today",
-    color: 0xffd66b,
-    altColor: 0xfff2cc,
-    css: "#ffd66b",
+    color: 0xd9c26a,
+    altColor: 0xf0e2b0,
+    css: "#d9c26a",
     core: "sun",
     angle: 0,
-    motion: "orbit-slow",
+    lanes: [
+      { r: 4.4, tiltX: 0 },
+      { r: 6.2, tiltX: 0 },
+    ],
     // Close orbit around the sun; rank = closer ring.
     layout: (i, seed) => {
       const ring = Math.floor(i / 7);
       const a = ((i % 7) / 7) * TAU + seed * 0.9 + ring * 0.45;
-      const r = 5.4 + ring * 1.8;
-      return { x: Math.cos(a) * r, y: (seeded(seed, 3) - 0.5) * 2.2, z: Math.sin(a) * r };
+      const r = 4.4 + ring * 1.8;
+      return { x: Math.cos(a) * r, y: (seeded(seed, 3) - 0.5) * 1.4, z: Math.sin(a) * r };
     },
   },
   {
     slug: "nba",
     label: "NBA",
-    color: 0xff8c3b,
-    altColor: 0xffc49b,
-    css: "#ff8c3b",
+    color: 0xd98d4f,
+    altColor: 0xf2c9a0,
+    css: "#d98d4f",
     core: "arena",
     angle: (210 / 360) * TAU,
-    motion: "orbit-fast",
+    lanes: [
+      { r: 3.6, tiltX: ARENA_TILT },
+      { r: 5.2, tiltX: ARENA_TILT },
+      { r: 6.8, tiltX: ARENA_TILT },
+    ],
     // Stories race around the arena ring plane; higher rank = inner lane.
     // Golden-angle spacing keeps the ring evenly populated instead of clumped.
     layout: (i, seed) => {
       const a = i * 2.39996 + seeded(seed, 7) * 0.4;
       const r = 3.4 + (i / 40) * 3.6 + seeded(seed, 11) * 0.5;
-      const tilt = 0.42; // matches the ring's tilt
       const y0 = (seeded(seed, 13) - 0.5) * 0.5;
       return {
         x: Math.cos(a) * r,
-        y: y0 + Math.sin(a) * r * Math.sin(tilt),
-        z: Math.sin(a) * r * Math.cos(tilt),
+        y: y0 + Math.sin(a) * r * Math.sin(ARENA_TILT),
+        z: Math.sin(a) * r * Math.cos(ARENA_TILT),
       };
     },
   },
   {
     slug: "tech",
     label: "Tech / VC",
-    color: 0x38e8c8,
-    altColor: 0x9ff5e6,
-    css: "#38e8c8",
+    color: 0x4fc9ae,
+    altColor: 0xbfeee2,
+    css: "#4fc9ae",
     core: "lattice",
     angle: (30 / 360) * TAU,
-    motion: "shimmer",
+    lanes: [], // the grid is the identity — no circular lanes
     // Snapped to a loose grid — circuitry, not a cloud.
     layout: (i, seed) => {
       const gx = Math.round((seeded(seed, 17) - 0.5) * 6) * 1.7;
@@ -110,12 +127,12 @@ export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "taiwan",
     label: "Taiwan",
-    color: 0x4ade8a,
-    altColor: 0xff6b4a,
-    css: "#4ade8a",
+    color: 0x5fbf8a,
+    altColor: 0xd88a63,
+    css: "#5fbf8a",
     core: "isle",
     angle: (330 / 360) * TAU,
-    motion: "rise",
+    lanes: [{ r: 4.2, tiltX: 0.18 }],
     // Lanterns rising off the island on a loose golden spiral.
     layout: (i, seed) => {
       const a = i * 2.39996 + seeded(seed, 29) * 0.8; // golden angle
@@ -126,12 +143,15 @@ export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "politics",
     label: "US Politics",
-    color: 0x6b8cff,
+    color: 0x7d96e8,
     altColor: 0xdde3f5,
-    css: "#6b8cff",
+    css: "#7d96e8",
     core: "rotunda",
     angle: (150 / 360) * TAU,
-    motion: "still",
+    lanes: [
+      { r: 4.4, tiltX: 0 },
+      { r: 6.0, tiltX: 0 },
+    ],
     // Two opposing chamber arcs around the rotunda.
     layout: (i, seed) => {
       const side = i % 2 === 0 ? -1 : 1;
@@ -148,12 +168,16 @@ export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "world",
     label: "World",
-    color: 0x9db4d8,
+    color: 0x9db0cc,
     altColor: 0xe8eefc,
-    css: "#9db4d8",
+    css: "#9db0cc",
     core: "globe",
     angle: (90 / 360) * TAU,
-    motion: "orbit-slow",
+    lanes: [
+      { r: 3.6, tiltX: 0.35 },
+      { r: 4.6, tiltX: 1.05 },
+      { r: 5.6, tiltX: 1.9 },
+    ],
     // Satellites on three inclined great-circle orbits.
     layout: (i, seed) => {
       const orbit = i % 3;
@@ -173,12 +197,17 @@ export const WORLD_VISUALS: WorldVisual[] = [
 export const VISUALS_BY_SLUG = new Map(WORLD_VISUALS.map((w) => [w.slug, w]));
 
 /**
- * World position on the galactic plane. Affinity pulls a world toward the
- * sun — the galaxy reshapes itself as the ranking engine learns you.
+ * Galaxy position on the galactic plane. Affinity pulls a galaxy toward the
+ * sun — the map reshapes itself as the ranking engine learns you.
  */
 export function worldPosition(visual: WorldVisual, affinity: number): Vec3 {
   if (visual.slug === "today") return { x: 0, y: 0, z: 0 };
   const r = 30 - affinity * 10; // 30 cold … 20 well-read
   const y = Math.sin(visual.angle * 2.3) * 4.5;
   return { x: Math.cos(visual.angle) * r, y, z: Math.sin(visual.angle) * r };
+}
+
+/** Galaxy scale from activity (0..1): a busy day reads visibly larger. */
+export function activityScale(activity: number): number {
+  return 0.65 + activity * 0.85;
 }

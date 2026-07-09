@@ -83,6 +83,24 @@ Third interface generation, replacing the Signal tab UI. One persistent Three.js
 - Labels are DOM nodes fed by projected positions every 3rd frame, with greedy screen-space decluttering and edge culling; no text rendered in-scene.
 - three.js is dynamically imported behind a splash so the base bundle stays lean; the render loop pauses when the tab is hidden; DPR clamped (2 desktop / 1.5 mobile) with a one-time automatic drop to 1 if sustained FPS < ~42; mobile skips antialiasing and halves the starfield. No postprocessing anywhere — additive halos read as bloom at zero pass cost.
 
+## Observatory v2 (2026-07-09): a two-tier visual grammar — the map is the message
+
+Refined the galaxy interface into an explicit grammar, approved from a rendered mockup. Aesthetic moved from nebula-glow to astronomical instrument (Stellarium/NASA Eyes): fine dim starfield, faint ecliptic reference rings, small defined cores, thin orbital lanes, restrained desaturated palettes.
+
+**Always-visible tier (2-second readability):** galaxy size = recency-weighted activity (24h half-life mass, `activityScale` 0.65–1.5×) so galaxies genuinely grow and shrink between sessions; pulse = breaking. Story size = rank, brightness = recency (unchanged). Ambient "N NEW" counts deleted — the pulse channel replaces badges.
+
+**Breaking must be rare to mean anything.** First implementation fired on any <45min story; with 37 sources syncing hourly, every galaxy pulsed — the unread-badge bug reborn as light. Redefined: breaking = a 2+ outlet corroborated cluster under 2h, OR a burst of 3+ fresh news/social stories inside 45min. Routine wire trickle stays dark. Found via screenshot QA; regression-tested.
+
+**Hover tier (on engagement only):** focusing a story spawns its satellite system — orbit speed = discussion velocity (multi-outlet pickup + real HN comment counts); controversy = orbital instability (ring wobble/flicker + satellite jitter), never color, and only claimed where evidence exists: the HN comments-to-points ratio. Non-HN stories report 0 rather than faking a stance model. The focus card mirrors both (velocity bars, ◈ CONTESTED).
+
+**Bridges — the functional novelty:** stories whose topics span two galaxies render as light trails physically connecting them (quadratic arcs, additive tubes, top-5 by rank, the most prominent gets an ambient tag). Tapping a bridge or its tag focuses the story. A tabbed UI structurally cannot surface these.
+
+**Motion discipline:** deleted all ambient orbital rotation from v1. The scene is still except: breaking pulse rings, the focused story's satellites, camera flight, and fresh-story halo breathing. Calmer, and kinder to motion-sensitive users.
+
+**Warp bar:** "/" or the ⌕ button opens type-to-jump over galaxies + all loaded story titles (client-side, no server round-trip); Enter flies you there fast. Exploration is for discovery; search is for intent.
+
+**Mobile:** DPR up to 2 for crisp rendering (FPS watchdog degrades to 1.2 if needed), wider default framing for portrait (radius 80 vs 58), edge-clamped labels, bottom-sheet cards, full-screen warp.
+
 ## Galaxy state & navigation
 
 Camera pose + current world persist to localStorage (every 4s and on pagehide); returning sessions wake up inside the last world with no re-flight. Worlds deep-link (`/g/taiwan`) via an optional catch-all route, with pushState/popstate keeping browser back/forward spatial. Keyboard: 1–6 jump worlds, Esc backs out (focus → world → galaxy). The Signal 2D feed was deleted; Saved/Sources remain flat dark pages; `/item/[id]` still serves deep-linked reads outside the scene.

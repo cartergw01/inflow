@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { GalaxyStory } from "../../galaxy/engine";
+import { controversy, discussionVelocity } from "../../galaxy/metrics";
 import { timeAgo } from "../../lib/format";
 import { sendSignal } from "../../lib/signals-client";
 
@@ -79,6 +80,18 @@ export function FocusCard({
         {story.readingMinutes ? <> — {story.readingMinutes} min</> : null}
         {story.exploration ? " — exploring" : ""}
       </div>
+      {(() => {
+        const v = discussionVelocity(story);
+        const c = controversy(story);
+        if (v < 0.2 && c < 0.15) return null;
+        const bars = v >= 0.66 ? "▮▮▮" : v >= 0.33 ? "▮▮▯" : "▮▯▯";
+        return (
+          <div className="mt-1.5 font-mono text-[0.575rem] tracking-[0.14em] uppercase">
+            <span className="text-white/45">velocity {bars}</span>
+            {c >= 0.15 ? <span className="ml-3" style={{ color: "#e8a06a" }}>◈ contested</span> : null}
+          </div>
+        );
+      })()}
       <div className="flex items-center gap-4 mt-3 pt-2.5 border-t font-mono text-[0.625rem] tracking-[0.16em] uppercase" style={{ borderColor: `${accent}22` }}>
         <button
           type="button"

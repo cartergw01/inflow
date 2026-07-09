@@ -14,6 +14,7 @@ import { rankFeed } from "./ranking/feed";
 import { affinityKey, type AffinityMap, type FeedEntry } from "./ranking/types";
 import { stripHtml } from "./ingest/normalize";
 import { CATEGORIES, type Category } from "./categories";
+import { activityIndex, isBreaking } from "../galaxy/metrics";
 
 const CANDIDATE_WINDOW_MS = 7 * 24 * 3600_000;
 const CANDIDATE_LIMIT = 500;
@@ -195,6 +196,10 @@ export interface WorldData {
   label: string;
   /** Normalized learned affinity 0..1 — drives orbital distance in the galaxy. */
   affinity: number;
+  /** Recency-weighted volume 0..1 — drives galaxy size (v2 grammar). */
+  activity: number;
+  /** True when a fresh burst exists — drives the pulse channel. */
+  breaking: boolean;
   newCount: number;
   entries: FeedItemDTO[];
 }
@@ -264,6 +269,8 @@ export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
       slug: cat.slug,
       label: cat.label,
       affinity: Math.tanh(weight / 6),
+      activity: activityIndex(entries, now.getTime()),
+      breaking: isBreaking(entries, now.getTime()),
       // Count within the ranked set the user will actually see, not the
       // whole candidate pool — "40 stories · 197 new" reads as a bug.
       newCount: entries.filter((e) => new Date(e.publishedAt).getTime() > dayAgo).length,

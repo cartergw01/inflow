@@ -8,6 +8,7 @@ import { queueSignal, sendSignal } from "../../lib/signals-client";
 import { timeAgo } from "../../lib/format";
 import { FocusCard } from "./focus-card";
 import { ReaderOverlay, type ReaderPayload } from "./reader-overlay";
+import { WarpBar, type WarpTarget } from "./warp-bar";
 
 const STATE_KEY = "inflow-galaxy-state";
 
@@ -34,6 +35,13 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
   const [focus, setFocus] = useState<FocusState | null>(null);
   const [reading, setReading] = useState<ReaderPayload | null>(null);
   const [diving, setDiving] = useState(false);
+  const [warping, setWarping] = useState(false);
+  const [searchIndex, setSearchIndex] = useState<{ id: number; title: string; world: string; sourceName: string }[]>([]);
+
+  const openWarp = useCallback(() => {
+    setSearchIndex(engineRef.current?.getSearchIndex() ?? []);
+    setWarping(true);
+  }, []);
   const [toast, setToast] = useState<string | null>(null);
   const impressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressed = useRef(new Set<number>());
@@ -134,7 +142,12 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
   /* ── keyboard ────────────────────────────────────────────────────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (reading) return; // reader handles its own keys
+      if (reading || warping) return; // overlays handle their own keys
+      if (e.key === "/") {
+        e.preventDefault();
+        openWarp();
+        return;
+      }
       if (e.key === "Escape") {
         if (focus) engineRef.current?.clearFocus();
         else if (view) engineRef.current?.exitToGalaxy();
@@ -146,7 +159,13 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [focus, view, reading]);
+  }, [focus, view, reading, warping, openWarp]);
+
+  const warpTo = useCallback((t: WarpTarget) => {
+    setWarping(false);
+    if (t.kind === "world") engineRef.current?.enterWorld(String(t.id), true);
+    else engineRef.current?.warpToStory(Number(t.id));
+  }, []);
 
   /* ── actions ─────────────────────────────────────────────────────── */
 
@@ -192,16 +211,15 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
   }, []);
 
   const worldData = view ? (view === "today" ? data?.today : data?.worlds.find((w) => w.slug === view)) : null;
-  const accent = view ? (VISUALS_BY_SLUG.get(view)?.css ?? "#6b8cff") : "#6b8cff";
+  const accent = view ? (VISUALS_BY_SLUG.get(view)?.css ?? "#8ba2ff") : "#8ba2ff";
   const totalStories = data ? data.worlds.reduce((a, w) => a + w.entries.length, 0) + data.today.entries.length : 0;
-  const totalNew = data ? data.worlds.reduce((a, w) => a + w.newCount, 0) : 0;
 
   return (
     <div className="fixed inset-0 bg-[#04040a] text-white overflow-hidden">
       <canvas ref={canvasRef} className="absolute inset-0 touch-none" />
 
       {/* labels layer */}
-      <div className="absolute inset-0 pointer-events-none select-none" aria-hidden>
+      <div className="absolute inset-0 pointer-events-none select-none">
         {labels.map((l) => (
           <div
             key={l.key}
@@ -217,6 +235,18 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
                   {l.sub}
                 </div>
               </>
+            ) : l.kind === "bridge" ? (
+              <button
+                type="button"
+                onClick={() => l.storyId && engineRef.current?.focusStory(l.storyId)}
+                className="pointer-events-auto cursor-pointer border px-2.5 py-1.5 text-left backdrop-blur-sm hover:border-white/50 transition-colors"
+                style={{ background: "rgba(8,10,18,0.78)", borderColor: "#2a3550" }}
+              >
+                <span className="block font-mono text-[9.5px] text-[#d8e4f4]">{l.text}</span>
+                <span className="block font-mono text-[8px] tracking-[0.14em] mt-0.5" style={{ color: l.color }}>
+                  {l.sub}
+                </span>
+              </button>
             ) : (
               <div
                 className="font-display font-semibold text-[11.5px] tracking-[0.01em] max-w-[240px] leading-tight"
@@ -249,25 +279,43 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
                   onClick={() => engineRef.current?.exitToGalaxy()}
                   className="cursor-pointer hover:text-white/70 pointer-events-auto"
                 >
-                  GALAXY
+                  OBSERVATORY
                 </button>{" "}
                 / <span style={{ color: accent }}>{worldData?.label.toUpperCase()}</span>
               </>
             ) : (
-              "— GALAXY"
+              "— OBSERVATORY"
             )}
           </span>
         </div>
-        <div className="hidden sm:flex items-center gap-5 font-mono text-[0.6rem] tracking-[0.16em] uppercase text-white/35 pointer-events-auto">
-          <span>
+        <button
+          type="button"
+          onClick={openWarp}
+          className="pointer-events-auto cursor-pointer hidden md:flex items-center gap-2.5 border border-[#2a2f42] bg-[#080a12]/70 px-4 py-2 w-[300px] hover:border-[#3d445e] transition-colors"
+          aria-label="Warp search"
+        >
+          <span className="text-[#565d78] text-[11px]" aria-hidden>⌕</span>
+          <span className="font-mono text-[9.5px] tracking-[0.14em] text-[#454b62] uppercase">Warp to a galaxy or story…</span>
+          <span className="ml-auto font-mono text-[9px] text-[#565d78] border border-[#2a2f42] px-1.5">/</span>
+        </button>
+        <div className="flex items-center gap-4 font-mono text-[0.6rem] tracking-[0.16em] uppercase text-white/35 pointer-events-auto">
+          <button
+            type="button"
+            onClick={openWarp}
+            className="md:hidden cursor-pointer text-white/70 text-[13px] px-1"
+            aria-label="Warp search"
+          >
+            ⌕
+          </button>
+          <span className="hidden sm:inline">
             {view && worldData
-              ? `${worldData.entries.length} stories · ${worldData.newCount} new · ranked for you`
-              : `${WORLD_VISUALS.length} worlds · ${totalStories} stories · ${totalNew} new${data?.updatedAt ? ` · synced ${timeAgo(data.updatedAt)} ago` : ""}`}
+              ? `${worldData.entries.length} stories · ranked for you`
+              : `${totalStories} stories${data?.updatedAt ? ` · synced ${timeAgo(data.updatedAt)} ago` : ""}`}
           </span>
-          <Link href="/saved" className="text-white/55 hover:text-white transition-colors">
+          <Link href="/saved" className="hidden sm:inline text-white/55 hover:text-white transition-colors">
             Saved
           </Link>
-          <Link href="/sources" className="text-white/55 hover:text-white transition-colors">
+          <Link href="/sources" className="hidden sm:inline text-white/55 hover:text-white transition-colors">
             Sources
           </Link>
         </div>
@@ -341,6 +389,15 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
           accent={accent}
           onClose={closeReader}
           onSaveChange={(s) => engineRef.current?.setSaved(reading.id, s)}
+        />
+      ) : null}
+
+      {/* warp */}
+      {warping && data ? (
+        <WarpBar
+          stories={searchIndex}
+          onWarp={warpTo}
+          onClose={() => setWarping(false)}
         />
       ) : null}
 

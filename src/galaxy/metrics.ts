@@ -87,6 +87,22 @@ export function controversy(story: MetricStory): number {
   return Math.min(1, Math.max(0, (ratio - 0.8) / 1.2));
 }
 
+/**
+ * Single-source claim detection — the "mark it, don't hide it" rule.
+ * A story is unconfirmed when it originates from the social/real-time tier
+ * (below wire-grade quality) and no other outlet corroborates it yet.
+ * Established-outlet reporting never gets flagged: original journalism from
+ * a wire or named publication runs at full confidence (per spec — the goal
+ * is catching unverified rumors, not slowing legitimate reporting).
+ */
+export function unconfirmedClaim(input: {
+  sourceClass: string;
+  qualityPrior: number;
+  clusterSize: number;
+}): boolean {
+  return input.sourceClass === "social" && input.qualityPrior < 0.8 && input.clusterSize === 0;
+}
+
 export interface Bridge {
   storyId: number;
   title: string;

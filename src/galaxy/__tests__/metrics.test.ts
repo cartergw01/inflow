@@ -6,6 +6,7 @@ import {
   discussionVelocity,
   isBreaking,
   parseHnStats,
+  unconfirmedClaim,
   type MetricStory,
 } from "../metrics";
 
@@ -86,6 +87,15 @@ describe("HN stats / velocity / controversy", () => {
   });
 });
 
+describe("unconfirmedClaim", () => {
+  it("flags only low-confidence, single-source social claims", () => {
+    expect(unconfirmedClaim({ sourceClass: "social", qualityPrior: 0.55, clusterSize: 0 })).toBe(true);
+    expect(unconfirmedClaim({ sourceClass: "social", qualityPrior: 0.55, clusterSize: 1 })).toBe(false);
+    expect(unconfirmedClaim({ sourceClass: "news", qualityPrior: 0.55, clusterSize: 0 })).toBe(false);
+    expect(unconfirmedClaim({ sourceClass: "social", qualityPrior: 0.9, clusterSize: 0 })).toBe(false);
+  });
+});
+
 describe("computeBridges", () => {
   it("finds stories spanning two galaxies and dedupes across worlds", () => {
     const tsmc = story({ id: 7, title: "TSMC export rules tighten", topics: ["tech", "taiwan"] });
@@ -99,9 +109,9 @@ describe("computeBridges", () => {
   });
 
   it("ranks by prominence and caps the count", () => {
-    const mk = (id: number, rank0: boolean) =>
-      story({ id, topics: ["us-politics", "world"], title: `S${id}` });
-    const entries = [mk(1, true), mk(2, false), mk(3, false), mk(4, false), mk(5, false), mk(6, false)];
+    const entries = Array.from({ length: 6 }, (_, i) =>
+      story({ id: i + 1, topics: ["us-politics", "world"], title: `S${i + 1}` }),
+    );
     const bridges = computeBridges([{ slug: "politics", entries }], 3);
     expect(bridges).toHaveLength(3);
     expect(bridges[0].storyId).toBe(1);

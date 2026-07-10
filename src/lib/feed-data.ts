@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, notInArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   affinities,
@@ -14,7 +14,7 @@ import { rankFeed } from "./ranking/feed";
 import { affinityKey, type AffinityMap, type FeedEntry } from "./ranking/types";
 import { stripHtml } from "./ingest/normalize";
 import { CATEGORIES, type Category } from "./categories";
-import { activityIndex, isBreaking } from "../galaxy/metrics";
+import { activityIndex, isBreaking, unconfirmedClaim } from "../galaxy/metrics";
 
 const CANDIDATE_WINDOW_MS = 7 * 24 * 3600_000;
 const CANDIDATE_LIMIT = 500;
@@ -42,6 +42,8 @@ export interface FeedItemDTO {
   saved: boolean;
   /** True when this profile has opened the item (read state, not impressions). */
   read: boolean;
+  /** Single-source social-tier claim, not yet corroborated — badge it. */
+  unconfirmed: boolean;
 }
 
 export interface FeedData {
@@ -64,11 +66,22 @@ export async function loadAffinityMap(profileId: string): Promise<AffinityMap> {
   return new Map(rows.map((r) => [affinityKey(r.dimension, r.key), { weight: r.weight, updatedAt: r.updatedAt }]));
 }
 
-function toDTO(entry: FeedEntry, savedIds: Set<number>, readIds: Set<number> = new Set()): FeedItemDTO {
+/** Chars→words divisor for HTML bodies (tags + markup inflate raw length). */
+const CHARS_PER_WORD_HTML = 7;
+
+function toDTO(
+  entry: FeedEntry,
+  savedIds: Set<number>,
+  readIds: Set<number> = new Set(),
+  contentLen: Map<number, number> = new Map(),
+): FeedItemDTO {
   const { item, source } = entry;
-  const hasBody = (item.contentHtml?.length ?? 0) > 500;
+  // Candidates carry content LENGTH, never content: shipping 500 full HTML
+  // bodies from the DB per request was the app's main latency cost.
+  const len = contentLen.get(item.id) ?? item.contentHtml?.length ?? 0;
+  const hasBody = len > 500;
   const readingMinutes = hasBody
-    ? Math.max(1, Math.round(stripHtml(item.contentHtml!).split(/\s+/).length / WORDS_PER_MINUTE))
+    ? Math.max(1, Math.round(len / CHARS_PER_WORD_HTML / WORDS_PER_MINUTE))
     : null;
   return {
     id: item.id,
@@ -89,6 +102,69 @@ function toDTO(entry: FeedEntry, savedIds: Set<number>, readIds: Set<number> = n
     alsoCoveredBy: entry.alsoCoveredBy ?? [],
     saved: savedIds.has(item.id),
     read: readIds.has(item.id),
+    unconfirmed: unconfirmedClaim({
+      sourceClass: source.sourceClass,
+      qualityPrior: source.qualityPrior,
+      clusterSize: entry.alsoCoveredBy?.length ?? 0,
+    }),
+  };
+}
+
+/**
+ * The shared candidate pool: lean item columns (content length instead of
+ * content), profile state, all fetched in one parallel batch. Muting filters
+ * in JS — it saves a serial DB round-trip and muted sources are rare.
+ */
+async function loadCandidatePool(profile: Profile) {
+  const db = getDb();
+  const since = new Date(Date.now() - CANDIDATE_WINDOW_MS);
+
+  const [rows, muted, affinityMap, savedRows, readIds] = await Promise.all([
+    db
+      .select({
+        id: items.id,
+        sourceId: items.sourceId,
+        guid: items.guid,
+        author: items.author,
+        title: items.title,
+        url: items.url,
+        canonicalUrl: items.canonicalUrl,
+        excerpt: items.excerpt,
+        imageUrl: items.imageUrl,
+        publishedAt: items.publishedAt,
+        fetchedAt: items.fetchedAt,
+        topics: items.topics,
+        clusterId: items.clusterId,
+        contentLen: sql<number>`coalesce(length(${items.contentHtml}), 0)`,
+        source: sources,
+      })
+      .from(items)
+      .innerJoin(sources, eq(items.sourceId, sources.id))
+      .where(gte(items.publishedAt, since))
+      .orderBy(desc(items.publishedAt))
+      .limit(CANDIDATE_LIMIT),
+    db.select({ sourceId: mutedSources.sourceId }).from(mutedSources).where(eq(mutedSources.profileId, profile.id)),
+    loadAffinityMap(profile.id),
+    db.select({ itemId: saves.itemId }).from(saves).where(eq(saves.profileId, profile.id)),
+    loadReadIds(profile.id),
+  ]);
+
+  const mutedIds = new Set(muted.map((m) => m.sourceId));
+  const contentLengths = new Map<number, number>();
+  const candidates = rows
+    .filter((r) => !mutedIds.has(r.sourceId))
+    .map((r) => {
+      const { source, contentLen, ...lean } = r;
+      contentLengths.set(r.id, contentLen);
+      return { item: { ...lean, contentHtml: null } as typeof items.$inferSelect, source };
+    });
+
+  return {
+    candidates,
+    contentLen: contentLengths,
+    affinityMap,
+    savedIds: new Set(savedRows.map((s) => s.itemId)),
+    readIds,
   };
 }
 
@@ -132,39 +208,15 @@ export async function loadTabCounts(): Promise<Record<string, number>> {
  * tab's topics — same ranking engine, narrower candidate pool.
  */
 export async function loadFeed(profile: Profile, category?: Category): Promise<FeedData> {
-  const db = getDb();
-  const since = new Date(Date.now() - CANDIDATE_WINDOW_MS);
-
-  const muted = await db
-    .select({ sourceId: mutedSources.sourceId })
-    .from(mutedSources)
-    .where(eq(mutedSources.profileId, profile.id));
-  const mutedIds = muted.map((m) => m.sourceId);
-
-  const candidateWhere = mutedIds.length
-    ? and(gte(items.publishedAt, since), notInArray(items.sourceId, mutedIds))
-    : gte(items.publishedAt, since);
-
-  const [allCandidates, affinityMap, savedRows, readIds] = await Promise.all([
-    db
-      .select({ item: items, source: sources })
-      .from(items)
-      .innerJoin(sources, eq(items.sourceId, sources.id))
-      .where(candidateWhere)
-      .orderBy(desc(items.publishedAt))
-      .limit(CANDIDATE_LIMIT),
-    loadAffinityMap(profile.id),
-    db.select({ itemId: saves.itemId }).from(saves).where(eq(saves.profileId, profile.id)),
-    loadReadIds(profile.id),
-  ]);
+  const pool = await loadCandidatePool(profile);
+  const { affinityMap, savedIds, readIds, contentLen } = pool;
 
   const topics = category?.topics ?? [];
   const candidates =
     topics.length === 0
-      ? allCandidates
-      : allCandidates.filter((c) => c.item.topics.some((t) => topics.includes(t)));
+      ? pool.candidates
+      : pool.candidates.filter((c) => c.item.topics.some((t) => topics.includes(t)));
 
-  const savedIds = new Set(savedRows.map((s) => s.itemId));
   const now = new Date();
   const entries = rankFeed({
     candidates,
@@ -182,13 +234,15 @@ export async function loadFeed(profile: Profile, category?: Category): Promise<F
     )
     .sort((a, b) => b.item.publishedAt.getTime() - a.item.publishedAt.getTime())
     .slice(0, LATEST_COUNT)
-    .map((c) => toDTO({ item: c.item, source: c.source, score: 0 }, savedIds, readIds));
+    .map((c) => toDTO({ item: c.item, source: c.source, score: 0 }, savedIds, readIds, contentLen));
 
-  const updatedAt = allCandidates.length
-    ? allCandidates.reduce((max, c) => (c.item.fetchedAt > max ? c.item.fetchedAt : max), allCandidates[0].item.fetchedAt).toISOString()
+  const updatedAt = pool.candidates.length
+    ? pool.candidates
+        .reduce((max, c) => (c.item.fetchedAt > max ? c.item.fetchedAt : max), pool.candidates[0].item.fetchedAt)
+        .toISOString()
     : null;
 
-  return { entries: entries.map((e) => toDTO(e, savedIds, readIds)), latest, updatedAt };
+  return { entries: entries.map((e) => toDTO(e, savedIds, readIds, contentLen)), latest, updatedAt };
 }
 
 export interface WorldData {
@@ -220,32 +274,7 @@ const WORLD_ENTRY_LIMIT = 40;
  * and squashed — it moves worlds closer to the sun as you read them.
  */
 export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
-  const db = getDb();
-  const since = new Date(Date.now() - CANDIDATE_WINDOW_MS);
-
-  const muted = await db
-    .select({ sourceId: mutedSources.sourceId })
-    .from(mutedSources)
-    .where(eq(mutedSources.profileId, profile.id));
-  const mutedIds = muted.map((m) => m.sourceId);
-  const candidateWhere = mutedIds.length
-    ? and(gte(items.publishedAt, since), notInArray(items.sourceId, mutedIds))
-    : gte(items.publishedAt, since);
-
-  const [candidates, affinityMap, savedRows, readIds] = await Promise.all([
-    db
-      .select({ item: items, source: sources })
-      .from(items)
-      .innerJoin(sources, eq(items.sourceId, sources.id))
-      .where(candidateWhere)
-      .orderBy(desc(items.publishedAt))
-      .limit(CANDIDATE_LIMIT),
-    loadAffinityMap(profile.id),
-    db.select({ itemId: saves.itemId }).from(saves).where(eq(saves.profileId, profile.id)),
-    loadReadIds(profile.id),
-  ]);
-
-  const savedIds = new Set(savedRows.map((s) => s.itemId));
+  const { candidates, affinityMap, savedIds, readIds, contentLen } = await loadCandidatePool(profile);
   const now = new Date();
   const dayAgo = now.getTime() - 24 * 3600_000;
 
@@ -260,7 +289,7 @@ export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
       seedInterests: profile.interests,
       now,
       opts: { limit: WORLD_ENTRY_LIMIT },
-    }).map((e) => toDTO(e, savedIds, readIds));
+    }).map((e) => toDTO(e, savedIds, readIds, contentLen));
     const weight = cat.topics.reduce((sum, t) => {
       const entry = affinityMap.get(affinityKey("topic", t));
       return sum + Math.max(0, entry?.weight ?? 0);

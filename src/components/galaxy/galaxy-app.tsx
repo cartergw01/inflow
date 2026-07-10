@@ -1,16 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CameraState, GalaxyEngine, GalaxyPayload, GalaxyStory, HudLabel } from "../../galaxy/engine";
 import { WORLD_VISUALS, VISUALS_BY_SLUG } from "../../galaxy/worlds";
 import { queueSignal, sendSignal } from "../../lib/signals-client";
 import { timeAgo } from "../../lib/format";
 import { FocusCard } from "./focus-card";
-import { ReaderOverlay, type ReaderPayload } from "./reader-overlay";
-import { WarpBar, type WarpTarget } from "./warp-bar";
+import type { ReaderPayload } from "./reader-overlay";
+import type { WarpTarget } from "./warp-bar";
+import { WorldSwitcher } from "./world-switcher";
 
 const STATE_KEY = "inflow-galaxy-state";
+const ReaderOverlay = dynamic(() => import("./reader-overlay").then((mod) => mod.ReaderOverlay));
+const WarpBar = dynamic(() => import("./warp-bar").then((mod) => mod.WarpBar));
 
 interface FocusState {
   story: GalaxyStory;
@@ -46,6 +50,21 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
   const impressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressed = useRef(new Set<number>());
   const isMobile = typeof window !== "undefined" && (innerWidth < 640 || "ontouchstart" in window);
+
+  const enterWorld = useCallback((slug: string) => {
+    engineRef.current?.enterWorld(slug, true);
+  }, []);
+
+  const stepWorld = useCallback(
+    (direction: -1 | 1) => {
+      const current = WORLD_VISUALS.findIndex((world) => world.slug === view);
+      const next = current === -1
+        ? direction === 1 ? 0 : WORLD_VISUALS.length - 1
+        : (current + direction + WORLD_VISUALS.length) % WORLD_VISUALS.length;
+      enterWorld(WORLD_VISUALS[next].slug);
+    },
+    [enterWorld, view],
+  );
 
   /* ── boot: fetch data, then dynamically import three + engine ───── */
   useEffect(() => {
@@ -143,6 +162,8 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (reading || warping) return; // overlays handle their own keys
+      const target = e.target as HTMLElement | null;
+      if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
       if (e.key === "/") {
         e.preventDefault();
         openWarp();
@@ -152,20 +173,25 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
         if (focus) engineRef.current?.clearFocus();
         else if (view) engineRef.current?.exitToGalaxy();
       }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        stepWorld(e.key === "ArrowLeft" ? -1 : 1);
+        return;
+      }
       const n = Number(e.key);
       if (n >= 1 && n <= WORLD_VISUALS.length) {
-        engineRef.current?.enterWorld(WORLD_VISUALS[n - 1].slug, true);
+        enterWorld(WORLD_VISUALS[n - 1].slug);
       }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [focus, view, reading, warping, openWarp]);
+  }, [focus, view, reading, warping, openWarp, enterWorld, stepWorld]);
 
   const warpTo = useCallback((t: WarpTarget) => {
     setWarping(false);
-    if (t.kind === "world") engineRef.current?.enterWorld(String(t.id), true);
+    if (t.kind === "world") enterWorld(String(t.id));
     else engineRef.current?.warpToStory(Number(t.id));
-  }, []);
+  }, [enterWorld]);
 
   /* ── actions ─────────────────────────────────────────────────────── */
 
@@ -271,7 +297,7 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
             <span className="w-3 h-3 inline-block" style={{ background: accent }} aria-hidden />
             <span className="font-display font-black text-[19px] leading-none tracking-[-0.02em]">INFLOW</span>
           </button>
-          <span className="font-mono text-[0.6rem] tracking-[0.2em] uppercase text-white/35 mt-0.5">
+          <span className="observatory-breadcrumb font-mono text-[0.6rem] tracking-[0.2em] uppercase text-white/35 mt-0.5">
             {view ? (
               <>
                 <button
@@ -322,39 +348,13 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
       </div>
 
       {/* bottom HUD */}
-      <div className="absolute bottom-0 left-0 right-0 flex items-end justify-between px-5 pb-4 pointer-events-none">
-        <div className="hidden sm:block font-mono text-[0.6rem] tracking-[0.18em] uppercase text-white/25">
-          {view
-            ? "esc — back to galaxy · drag to look · tap a story to focus"
-            : "drag to orbit — scroll to approach — tap a world to enter"}
-        </div>
-        <div className="flex gap-3.5 pointer-events-auto items-center" role="navigation" aria-label="Worlds">
-          {WORLD_VISUALS.map((w) => (
-            <button
-              key={w.slug}
-              type="button"
-              onClick={() => engineRef.current?.enterWorld(w.slug, true)}
-              aria-label={w.label}
-              className="cursor-pointer flex flex-col items-center gap-1 group"
-            >
-              <span
-                className="w-2.5 h-2.5 rounded-full transition-all"
-                style={{
-                  background: w.css,
-                  opacity: view === w.slug ? 1 : 0.45,
-                  outline: view === w.slug ? `1px solid ${w.css}77` : "none",
-                  outlineOffset: 3,
-                }}
-              />
-              <span
-                className="font-mono text-[8px] tracking-[0.12em] uppercase transition-opacity"
-                style={{ color: w.css, opacity: view === w.slug ? 0.9 : 0 }}
-              >
-                {w.slug === "politics" ? "POL" : w.slug.toUpperCase()}
-              </span>
-            </button>
-          ))}
-        </div>
+      <div className="observatory-bottom-hud absolute bottom-0 left-0 right-0 flex justify-center px-3 sm:px-5 pointer-events-none" data-obscured={Boolean(focus)}>
+        <WorldSwitcher
+          activeWorld={view}
+          onOverview={() => engineRef.current?.exitToGalaxy()}
+          onSelect={enterWorld}
+          onStep={stepWorld}
+        />
       </div>
 
       {/* focus card */}

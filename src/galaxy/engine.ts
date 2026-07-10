@@ -91,9 +91,8 @@ const TMP = new THREE.Vector3();
 const WHITE = new THREE.Color(0xffffff);
 const EMBER = new THREE.Color(0x272a34);
 const TAU = Math.PI * 2;
-const GALAXY_BACKDROP_URL = "/images/inflow-spiral-galaxy.png";
-const CORE_TEXTURE_ATLAS_URL = "/images/inflow-celestial-core-atlas.png";
-const STORY_STAR_SPRITE_URL = "/images/inflow-story-star-sprite.png";
+const GALAXY_BACKDROP_URL = "/images/inflow-galaxy-background-v2.webp";
+const CORE_TEXTURE_ATLAS_URL = "/images/inflow-celestial-core-atlas-v2.webp";
 
 type CoreTextureKey = WorldVisual["core"];
 
@@ -268,7 +267,7 @@ export class GalaxyEngine {
   private moved = false;
   private lastPinch = 0;
 
-  private clock = new THREE.Clock();
+  private timer = new THREE.Timer();
   private frame = 0;
   private disposed = false;
   private fpsSamples: number[] = [];
@@ -286,15 +285,16 @@ export class GalaxyEngine {
     this.radius = opts.isMobile ? 80 : 58;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.isMobile, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, opts.isMobile ? 1.25 : 1.75));
     this.renderer.setSize(innerWidth, innerHeight);
 
     this.camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 500);
     this.scene.fog = new THREE.FogExp2(0x030407, 0.006);
+    this.scene.backgroundIntensity = 0.46;
+    this.timer.connect(document);
 
     this.loadGalaxyBackdrop();
     this.loadCoreTextureAtlas();
-    this.loadStoryStarSprite();
     this.buildGalacticDisc();
     this.buildStarfield();
     this.buildEcliptic();
@@ -340,23 +340,6 @@ export class GalaxyEngine {
       texture.magFilter = THREE.LinearFilter;
       this.backdropTexture = texture;
       this.scene.background = texture;
-    });
-  }
-
-  private loadStoryStarSprite() {
-    const loader = new THREE.TextureLoader();
-    loader.load(STORY_STAR_SPRITE_URL, (texture) => {
-      if (this.disposed) {
-        texture.dispose();
-        return;
-      }
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-      texture.wrapS = THREE.ClampToEdgeWrapping;
-      texture.wrapT = THREE.ClampToEdgeWrapping;
-      this.ownedTextures.push(texture);
-      this.glowUniforms.uSprite.value = texture;
     });
   }
 
@@ -423,7 +406,7 @@ export class GalaxyEngine {
 
   /** A quiet spiral-disk star bed so the Observatory reads as a galaxy, not a solar map. */
   private buildGalacticDisc() {
-    const n = this.isMobile ? 2200 : 5200;
+    const n = this.isMobile ? 1800 : 4200;
     const pos = new Float32Array(n * 3);
     const colors = new Float32Array(n * 3);
     const core = new THREE.Color(0xffe4bd);
@@ -459,9 +442,9 @@ export class GalaxyEngine {
       size: this.isMobile ? 0.16 : 0.13,
       sizeAttenuation: true,
       transparent: true,
-      opacity: 0.72,
+      opacity: 0.5,
       vertexColors: true,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
       depthWrite: false,
       fog: false,
     });
@@ -473,7 +456,7 @@ export class GalaxyEngine {
   }
 
   private buildStarfield() {
-    const n = this.isMobile ? 1200 : 2600;
+    const n = this.isMobile ? 800 : 1800;
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const r = 150 + Math.random() * 220;
@@ -486,7 +469,7 @@ export class GalaxyEngine {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     this.scene.add(
-      new THREE.Points(g, new THREE.PointsMaterial({ color: 0x77809f, size: 0.2, transparent: true, opacity: 0.46, fog: false })),
+      new THREE.Points(g, new THREE.PointsMaterial({ color: 0x77809f, size: 0.18, transparent: true, opacity: 0.34, fog: false })),
     );
   }
 
@@ -767,7 +750,7 @@ export class GalaxyEngine {
     const scale = this.worldScales.get(slug) ?? 1;
     this.flyTo(
       { target: group.position.clone(), theta: this.theta + 0.7, phi: 1.25, radius: (this.isMobile ? 19 : 14) * Math.max(scale, 0.8) },
-      fast ? 450 : 1400,
+      fast ? 340 : 1200,
     );
   }
 
@@ -1022,8 +1005,9 @@ export class GalaxyEngine {
     requestAnimationFrame(this.loop);
     if (document.hidden) return;
 
-    const dt = this.clock.getDelta();
-    const t = this.clock.elapsedTime;
+    this.timer.update();
+    const dt = this.timer.getDelta();
+    const t = this.timer.getElapsed();
     this.frame++;
 
     if (this.anim) {
@@ -1081,9 +1065,9 @@ export class GalaxyEngine {
     if (this.focusedId !== null) {
       this.focusRing.lookAt(this.camera.position);
       if (this.focusSystem) this.focusSystem.ring.lookAt(this.camera.position);
-      if (this.frame % 2 === 0) this.emitFocus();
+      if (this.frame % (this.isMobile ? 4 : 3) === 0) this.emitFocus();
     }
-    if (this.frame % 3 === 0) this.emitLabels();
+    if (this.frame % (this.isMobile ? 8 : 5) === 0) this.emitLabels();
 
     this.renderer.render(this.scene, this.camera);
 
@@ -1106,6 +1090,7 @@ export class GalaxyEngine {
     this.backdropTexture?.dispose();
     this.fallbackGlowTexture.dispose();
     for (const texture of this.ownedTextures) texture.dispose();
+    this.timer.dispose();
     this.renderer.dispose();
   }
 }

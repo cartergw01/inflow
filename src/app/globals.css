@@ -172,9 +172,7 @@ body {
 /* ── Observatory (galaxy interface) ─────────────────────────────────── */
 
 .observatory-shell {
-  background:
-    radial-gradient(circle at 50% 42%, rgba(126, 148, 232, 0.16), transparent 34%),
-    #04040a url("/images/inflow-spiral-galaxy.png") center / cover no-repeat;
+  background: #030408;
 }
 
 .space-shell {
@@ -195,23 +193,158 @@ body {
 
 .space-shell::before {
   background:
-    linear-gradient(90deg, rgba(4, 4, 10, 0.76), rgba(4, 4, 10, 0.3) 42%, rgba(4, 4, 10, 0.84)),
-    url("/images/inflow-spiral-galaxy.png") center / cover no-repeat;
-  filter: saturate(0.9) brightness(0.62);
-  opacity: 0.42;
-  transform: scale(1.02);
+    linear-gradient(90deg, rgba(3, 4, 8, 0.84), rgba(3, 4, 8, 0.46) 48%, rgba(3, 4, 8, 0.88)),
+    url("/images/inflow-galaxy-background-v2.webp") center / cover no-repeat;
+  filter: saturate(0.45) brightness(0.58);
+  opacity: 0.48;
 }
 
 .space-shell::after {
   background:
-    radial-gradient(circle at 50% 28%, rgba(255, 226, 188, 0.14), transparent 24rem),
-    radial-gradient(circle at 22% 72%, rgba(77, 107, 255, 0.12), transparent 22rem),
-    linear-gradient(180deg, rgba(4, 4, 10, 0.62), #04040a 76%);
+    radial-gradient(ellipse at center, transparent 28%, rgba(3, 4, 8, 0.46) 100%),
+    linear-gradient(180deg, rgba(3, 4, 8, 0.36), #030408 82%);
 }
 
 .space-shell > * {
   position: relative;
   z-index: 1;
+}
+
+.observatory-bottom-hud {
+  z-index: 20;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  transition: opacity 140ms ease;
+}
+
+.world-switcher {
+  display: flex;
+  align-items: stretch;
+  width: min(760px, calc(100vw - 24px));
+  height: 48px;
+  overflow: hidden;
+  border: 1px solid rgba(106, 117, 151, 0.36);
+  border-radius: 6px;
+  background: rgba(6, 8, 14, 0.88);
+  box-shadow: 0 18px 56px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(14px);
+}
+
+.world-switcher__rail {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+}
+
+.world-switcher__step,
+.world-switcher__segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 46px;
+  color: rgba(229, 232, 241, 0.56);
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.world-switcher__step {
+  width: 46px;
+  border-color: rgba(106, 117, 151, 0.24);
+  font-family: var(--font-mono), monospace;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.world-switcher__step:first-child {
+  border-right-width: 1px;
+}
+
+.world-switcher__step:last-child {
+  border-left-width: 1px;
+}
+
+.world-switcher__step:hover,
+.world-switcher__step:focus-visible {
+  color: white;
+  background: rgba(255, 255, 255, 0.07);
+  outline: none;
+}
+
+.world-switcher__segment {
+  scroll-snap-align: center;
+  gap: 7px;
+  padding: 0 14px;
+  border-right: 1px solid rgba(106, 117, 151, 0.14);
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.world-switcher__segment:hover,
+.world-switcher__segment:focus-visible {
+  color: white;
+  background: rgba(255, 255, 255, 0.055);
+  outline: none;
+}
+
+.world-switcher__segment[data-active="true"] {
+  color: white;
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 -2px 0 var(--world-color, #a9b4d6);
+}
+
+.world-switcher__marker {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--world-color, #a9b4d6);
+  opacity: 0.62;
+}
+
+.world-switcher__segment[data-active="true"] .world-switcher__marker {
+  opacity: 1;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--world-color) 60%, transparent);
+}
+
+@media (max-width: 639px) {
+  .observatory-bottom-hud[data-obscured="true"] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .world-switcher {
+    height: 50px;
+  }
+
+  .world-switcher__step {
+    width: 44px;
+    min-height: 48px;
+  }
+
+  .world-switcher__segment {
+    min-height: 48px;
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .observatory-breadcrumb {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .observatory-bottom-hud,
+  .world-switcher__step,
+  .world-switcher__segment {
+    transition: none;
+  }
 }
 
 @keyframes card-in {

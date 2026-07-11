@@ -294,12 +294,18 @@ body {
 .reader-article__byline span { color:var(--ink-soft); }
 .reader-article__byline a { text-decoration:none; }
 .reader-article__byline small { display:block; margin-top:7px; color:var(--ink-soft); font:inherit; font-weight:600; }
+.reader-article__byline .reader-article__provenance { margin-top:2px; color:var(--ink-faint); font-weight:400; text-transform:none; }
 .reader-trust-banner { display:grid; gap:5px; margin-bottom:34px; padding:14px 16px; border-left:3px solid #d6a243; color:var(--ink-soft); background:color-mix(in srgb,#d6a243 10%,var(--paper)); font-family:var(--font-mono),monospace; font-size:10px; line-height:1.5; text-transform:uppercase; }
 .reader-trust-banner strong { color:var(--ink); }
 .reader-trust-banner[data-verification=unconfirmed],.reader-trust-banner[data-status=retracted] { border-left-color:#d8664c; background:color-mix(in srgb,#d8664c 10%,var(--paper)); }
 .reader-article .reader-body { margin-top:0; color:var(--ink); font-size:17px; line-height:1.76; }
 .reader-article__fallback p { color:var(--ink-soft); font-size:18px; line-height:1.7; }
 .reader-article__fallback a { display:inline-block; margin-top:34px; padding:12px 18px; color:#090a0d; font-family:var(--font-mono),monospace; font-size:11px; font-weight:700; text-transform:uppercase; }
+.reader-view-loading { margin:0 0 30px; color:var(--ink-soft); }
+.reader-view-loading div { display:flex; align-items:center; gap:10px; font-family:var(--font-mono),monospace; font-size:10px; text-transform:uppercase; }
+.reader-view-loading div span { width:8px; height:8px; border-radius:50%; background:currentColor; animation:reader-pulse 1.1s ease-in-out infinite; }
+.reader-view-loading p { margin-top:22px; color:var(--ink-soft); font-size:18px; line-height:1.7; }
+@keyframes reader-pulse { 0%,100%{opacity:.28;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
 .reader-feedback { margin-top:72px; padding-top:24px; border-top:1px solid var(--rule); color:var(--ink-faint); font-family:var(--font-mono),monospace; font-size:11px; text-transform:uppercase; }
 .reader-feedback div { display:flex; gap:20px; margin-top:16px; }
 .reader-feedback button { cursor:pointer; color:var(--ink-soft); }

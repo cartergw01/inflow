@@ -21,7 +21,18 @@ export interface ReaderPayload {
   contentHtml: string | null;
   excerpt: string | null;
   url: string;
+  contentType: "feed" | "publisher" | "post" | "preview";
+  readerViewAvailable: boolean;
   saved: boolean;
+}
+
+interface PublisherReaderPayload {
+  title: string | null;
+  contentHtml: string;
+  excerpt: string | null;
+  author: string | null;
+  readingMinutes: number;
+  contentType: "publisher";
 }
 
 export function ReaderOverlay({ item, accent, onClose, onSaveChange }: {
@@ -33,6 +44,10 @@ export function ReaderOverlay({ item, accent, onClose, onSaveChange }: {
   const [saved, setSaved] = useState(item.saved);
   const [noted, setNoted] = useState<"more" | "less" | null>(null);
   const [progress, setProgress] = useState(0);
+  const [publisherContent, setPublisherContent] = useState<PublisherReaderPayload | null>(null);
+  const [readerViewStatus, setReaderViewStatus] = useState<"idle" | "loading" | "failed">(
+    item.readerViewAvailable ? "loading" : "idle",
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const visibleMs = useRef(0);
@@ -40,11 +55,6 @@ export function ReaderOverlay({ item, accent, onClose, onSaveChange }: {
 
   useEffect(() => {
     backRef.current?.focus();
-    scrollRef.current?.querySelectorAll("img").forEach((image) => {
-      image.loading = "lazy";
-      image.decoding = "async";
-      image.referrerPolicy = "no-referrer";
-    });
     visibleSince.current = document.visibilityState === "visible" ? Date.now() : null;
     const onVisibility = () => {
       if (document.visibilityState === "visible") visibleSince.current ??= Date.now();
@@ -56,6 +66,39 @@ export function ReaderOverlay({ item, accent, onClose, onSaveChange }: {
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
+
+  const contentHtml = publisherContent?.contentHtml ?? item.contentHtml;
+  const displayTitle = publisherContent?.title ?? item.title;
+  const displayAuthor = publisherContent?.author ?? item.author;
+  const displayExcerpt = publisherContent?.excerpt ?? item.excerpt;
+  const contentType = publisherContent?.contentType ?? item.contentType;
+
+  useEffect(() => {
+    scrollRef.current?.querySelectorAll("img").forEach((image) => {
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.referrerPolicy = "no-referrer";
+    });
+  }, [contentHtml]);
+
+  useEffect(() => {
+    if (!item.readerViewAvailable) return;
+    const controller = new AbortController();
+    fetch(`/api/item/${item.id}/content`, { signal: controller.signal })
+      .then(async (response) => response.status === 204 ? null : response.ok ? response.json() as Promise<PublisherReaderPayload> : null)
+      .then((payload) => {
+        if (payload) {
+          setPublisherContent(payload);
+          setReaderViewStatus("idle");
+        } else {
+          setReaderViewStatus("failed");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) setReaderViewStatus("failed");
+      });
+    return () => controller.abort();
+  }, [item.id, item.readerViewAvailable]);
 
   const close = () => {
     if (visibleSince.current !== null) {
@@ -111,19 +154,30 @@ export function ReaderOverlay({ item, accent, onClose, onSaveChange }: {
         ) : null}
         <header className="reader-article__header">
           <div className="reader-article__topic" style={{ color: accent }}>{item.topics.map(topicLabel).join(" / ") || item.sourceName}</div>
-          <h1 id={`reader-title-${item.id}`}>{item.title}</h1>
+          <h1 id={`reader-title-${item.id}`}>{displayTitle}</h1>
           <div className="reader-article__byline">
             {item.sourceHomepageUrl ? <a href={item.sourceHomepageUrl} target="_blank" rel="noopener noreferrer"><span>{item.sourceName}</span></a> : <span>{item.sourceName}</span>}
-            {item.author ? <> — {item.author}</> : null}
+            {displayAuthor ? <> — {displayAuthor}</> : null}
             <> — {fullDate(item.publishedAt)} · {timeAgo(item.publishedAt)} ago</>
             {item.sourceCheckedAt ? <> · feed checked {timeAgo(item.sourceCheckedAt)} ago</> : null}
             <small>{item.verificationStatus === "corroborated" ? "Corroborated reporting" : item.verificationStatus === "unconfirmed" ? "Unconfirmed social report" : `${item.credibilityTier} source`}</small>
+            <small className="reader-article__provenance">
+              {contentType === "publisher" ? "Reader view prepared from the publisher page"
+                : contentType === "feed" ? "Full text supplied by the publisher feed"
+                  : contentType === "post" ? "Source post"
+                    : "Publisher preview"}
+              {publisherContent?.readingMinutes ? ` · ${publisherContent.readingMinutes} min read` : ""}
+            </small>
           </div>
         </header>
-        {item.contentHtml ? <div className="reader-body reader-body-system" dangerouslySetInnerHTML={{ __html: item.contentHtml }} /> : <div className="reader-article__fallback">
-          {item.excerpt ? <p>{item.excerpt}</p> : null}
-          <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={() => sendSignal({ itemId: item.id, type: "open" })} style={{ background: accent }}>Read at {item.sourceName} <span aria-hidden>↗</span></a>
-        </div>}
+        {readerViewStatus === "loading" ? <div className="reader-view-loading" role="status">
+          <div><span aria-hidden />Preparing a clean reader view…</div>
+          {!contentHtml && displayExcerpt ? <p>{displayExcerpt}</p> : null}
+        </div> : null}
+        {contentHtml ? <div className="reader-body reader-body-system" dangerouslySetInnerHTML={{ __html: contentHtml }} /> : readerViewStatus !== "loading" ? <div className="reader-article__fallback">
+          {displayExcerpt ? <p>{displayExcerpt}</p> : <p>This publisher did not make the story text available to InFlow.</p>}
+          <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={() => sendSignal({ itemId: item.id, type: "open" })} style={{ background: accent }}>Continue at {item.sourceName} <span aria-hidden>↗</span></a>
+        </div> : null}
         <footer className="reader-feedback"><p>Should InFlow bring you more stories like this?</p>
           {noted ? <span style={{ color: accent }}>Preference noted</span> : <div><button type="button" onClick={() => note("more")}>More like this</button><button type="button" onClick={() => note("less")}>Less like this</button></div>}
         </footer>

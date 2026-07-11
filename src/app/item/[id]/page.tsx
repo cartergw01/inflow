@@ -32,7 +32,9 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
     topics: item.topics,
     contentHtml: item.contentHtml,
     excerpt: item.excerpt,
-    url: item.url,
+    url: item.canonicalUrl || item.url,
+    contentType: item.contentHtml ? (source.sourceClass === "social" ? "post" : "feed") : "preview",
+    readerViewAvailable: !item.contentHtml || (source.sourceClass === "social" && item.canonicalUrl !== item.url),
     saved,
   }} />;
 }

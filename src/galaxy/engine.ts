@@ -221,6 +221,7 @@ export class GalaxyEngine {
   private camera: THREE.PerspectiveCamera;
   private cb: EngineCallbacks;
   private isMobile: boolean;
+  private reducedMotion: boolean;
 
   private worldGroups = new Map<string, THREE.Group>();
   private worldScales = new Map<string, number>();
@@ -267,11 +268,12 @@ export class GalaxyEngine {
     canvas: HTMLCanvasElement,
     data: GalaxyPayload,
     cb: EngineCallbacks,
-    opts: { isMobile: boolean; initial?: CameraState | null },
+    opts: { isMobile: boolean; initial?: CameraState | null; reducedMotion?: boolean },
   ) {
     this.cb = cb;
     this.data = data;
     this.isMobile = opts.isMobile;
+    this.reducedMotion = Boolean(opts.reducedMotion);
     this.radius = opts.isMobile ? 110 : 72;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.isMobile, powerPreference: "high-performance" });
@@ -1016,6 +1018,15 @@ export class GalaxyEngine {
   }
 
   private flyTo(to: { target: THREE.Vector3; theta: number; phi: number; radius: number }, dur: number, done?: () => void) {
+    if (this.reducedMotion) {
+      this.target.copy(to.target);
+      this.theta = to.theta;
+      this.phi = to.phi;
+      this.radius = to.radius;
+      this.anim = null;
+      done?.();
+      return;
+    }
     this.anim = {
       t0: performance.now(),
       dur,
@@ -1228,20 +1239,25 @@ export class GalaxyEngine {
     );
     this.camera.lookAt(this.target);
 
-    this.glowUniforms.uTime.value = t;
+    this.glowUniforms.uTime.value = this.reducedMotion ? 0 : t;
     // Glow LOD: soft from orbit, tight inside a galaxy.
     const gs = this.glowUniforms.uGlowScale;
     gs.value += ((this.view ? 0.5 : 1) - gs.value) * Math.min(1, dt * 4);
 
     // Motion discipline: only breaking pulses and the focused system move.
     for (const p of this.pulses) {
+      if (this.reducedMotion) {
+        p.ring.scale.setScalar(1);
+        (p.ring.material as THREE.MeshBasicMaterial).opacity = 0.28;
+        continue;
+      }
       const k = ((t * 0.42 + p.phase) % 1 + 1) % 1;
       const s = 1 + k * 1.5;
       p.ring.scale.setScalar(s);
       (p.ring.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - k);
     }
 
-    if (this.focusSystem) {
+    if (this.focusSystem && !this.reducedMotion) {
       const fs = this.focusSystem;
       const wob = fs.instability;
       fs.group.rotation.y += dt * fs.omega;

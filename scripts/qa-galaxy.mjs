@@ -1,60 +1,56 @@
-// Interaction QA for the Observatory: walks galaxy → world → focus → reader,
-// screenshotting each stage. Usage: node scripts/qa-galaxy.mjs <cookie> <outdir> [base] [mobile]
+// Hybrid experience QA: briefing → reader → restored briefing → universe → world → focus → reader.
+// Usage: node scripts/qa-galaxy.mjs <cookie-or-empty> <outdir> [base] [mobile]
 import puppeteer from "puppeteer-core";
 
-const [, , cookie, outdir, base = "http://localhost:3000", mobile = ""] = process.argv;
+const [, , cookie = "", outdir, base = "http://localhost:3000", mobile = ""] = process.argv;
+if (!outdir) throw new Error("output directory is required");
 
-const browser = await puppeteer.launch({
-  executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  headless: "new",
-});
+const browser = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new" });
 const page = await browser.newPage();
 const isMobile = mobile === "mobile";
-await page.setViewport(
-  isMobile ? { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { width: 1440, height: 900, deviceScaleFactor: 2 },
-);
-const [name, value] = cookie.split("=");
-await page.setCookie({ name, value, domain: new URL(base).hostname, path: "/", httpOnly: true });
-page.on("pageerror", (err) => console.error("[pageerror]", err.message));
+await page.setViewport(isMobile ? { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { width: 1440, height: 900, deviceScaleFactor: 2 });
+if (cookie) {
+  const [name, value] = cookie.split("=");
+  await page.setCookie({ name, value, domain: new URL(base).hostname, path: "/", httpOnly: true });
+}
+page.on("pageerror", (error) => console.error("[pageerror]", error.message));
 
-await page.goto(base + "/", { waitUntil: "domcontentloaded" });
-await page.waitForFunction("!!window.__inflow", { timeout: 30000 });
-await new Promise((r) => setTimeout(r, 2500));
 const tag = isMobile ? "-m" : "";
-await page.screenshot({ path: `${outdir}/1-galaxy${tag}.png` });
+await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".briefing-story__main", { timeout: 30000 });
+await new Promise((resolve) => setTimeout(resolve, 1500));
+await page.screenshot({ path: `${outdir}/1-briefing${tag}.png` });
 
-// fly into NBA
-await page.evaluate(() => window.__inflow.enterWorld("nba"));
-await new Promise((r) => setTimeout(r, 2200));
-await page.screenshot({ path: `${outdir}/2-world${tag}.png` });
+await page.$eval(".briefing-panel__scroll", (element) => { element.scrollTop = 360; });
+const briefingScroll = await page.$eval(".briefing-panel__scroll", (element) => element.scrollTop);
+await page.click(".briefing-story__main");
+await page.waitForSelector(".reader-surface", { timeout: 30000 });
+if (!/\/item\/\d+/.test(new URL(page.url()).pathname)) throw new Error("reader did not expose its item URL");
+await page.screenshot({ path: `${outdir}/2-reader${tag}.png` });
 
-// focus the top story
-const storyId = await page.evaluate(() => {
-  const eng = window.__inflow;
-  const top = eng.byWorldIndex.get("nba")[0];
-  eng.focusStory(top.id);
-  return top.id;
+await page.click(".reader-toolbar__back");
+await page.waitForFunction(() => !document.querySelector(".reader-surface") && location.pathname === "/");
+const restoredScroll = await page.$eval(".briefing-panel__scroll", (element) => element.scrollTop);
+if (Math.abs(restoredScroll - briefingScroll) > 4) throw new Error(`briefing scroll was not restored: ${briefingScroll} → ${restoredScroll}`);
+await page.screenshot({ path: `${outdir}/3-restored${tag}.png` });
+
+await page.evaluate(() => {
+  const button = [...document.querySelectorAll(".inflow-primary-nav button")].find((element) => element.textContent?.trim() === "Universe");
+  if (!(button instanceof HTMLButtonElement)) throw new Error("Universe navigation unavailable");
+  button.click();
 });
-await new Promise((r) => setTimeout(r, 900));
-await page.screenshot({ path: `${outdir}/3-focus${tag}.png` });
+await page.waitForSelector(".universe-rail", { timeout: 30000 });
+await page.waitForFunction(() => Boolean(window.__inflow));
+await page.evaluate(() => window.__inflow.enterWorld("nba", true));
+await new Promise((resolve) => setTimeout(resolve, 700));
+await page.screenshot({ path: `${outdir}/4-world${tag}.png` });
 
-// press Read
-const readBtn = await page.$$eval("button", (btns) => {
-  const b = btns.find((x) => x.textContent?.includes("Read →"));
-  if (b) b.click();
-  return !!b;
-});
-console.log("read clicked:", readBtn, "story:", storyId);
-await new Promise((r) => setTimeout(r, 2600));
-await page.screenshot({ path: `${outdir}/4-reader${tag}.png` });
+await page.click(".universe-story-list button");
+await page.waitForSelector(".universe-focus", { timeout: 10000 });
+await page.screenshot({ path: `${outdir}/5-focus${tag}.png` });
+await page.click(".universe-focus__read");
+await page.waitForSelector(".reader-surface", { timeout: 30000 });
+await page.screenshot({ path: `${outdir}/6-world-reader${tag}.png` });
 
-// close reader → back to space
-await page.$$eval("button", (btns) => {
-  const b = btns.find((x) => x.textContent?.includes("Back to space"));
-  if (b) b.click();
-});
-await new Promise((r) => setTimeout(r, 1400));
-await page.screenshot({ path: `${outdir}/5-back${tag}.png` });
-
-console.log("done");
+console.log(JSON.stringify({ briefingScroll, restoredScroll, mobile: isMobile, path: new URL(page.url()).pathname }));
 await browser.close();

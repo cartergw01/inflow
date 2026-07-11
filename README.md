@@ -31,7 +31,7 @@ GitHub Actions cron (~5 min) ───▶ POST /api/ingest
 
 - **Ingestion** ([src/lib/ingest](src/lib/ingest)) — named sources across NBA, tech/VC, Taiwan, US politics, markets, and world news. Major wires and social signals poll every 5 minutes, general news every 10, and longform every 30. Conditional GET, publisher-only excerpts, sanitized reader HTML, same-story clustering, correction history, and source-family-aware corroboration are built in. Official X recent search stays off until `X_BEARER_TOKEN` is set (pay per use; see [NOTES.md](NOTES.md)).
 - **Ranking** ([src/lib/ranking](src/lib/ranking)) — pure functions: signal→affinity updates with exponential decay, per-source-class recency half-lives (3h social / 24h news / 96h longform), cluster collapse, interleaving penalties, deterministic exploration slots.
-- **Interface** ([src/app](src/app), [src/components](src/components)) — an explorable 3D briefing with conventional tap/select, drag/pan, wheel/pinch zoom, persistent search and full-galaxy controls, a catch-up view for stories new since the last open, and a calm in-app reader. Anonymous cookie profiles need no login or onboarding gate.
+- **Interface** ([src/app](src/app), [src/components](src/components)) — a finite eight-story daily briefing backed by an explorable 3D universe, an accessible ranked story rail, server-backed search, an independent library, and a calm reader with queue navigation and saved typography preferences. Anonymous cookie profiles need no login or onboarding gate.
 
 ## Stack
 

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "../../../db";
 import { profiles } from "../../../db/schema";
-import { PROFILE_COOKIE } from "../../../lib/profile";
+import { getProfileId, PROFILE_COOKIE } from "../../../lib/profile";
+import { eq } from "drizzle-orm";
 
 const KNOWN_TOPICS = new Set([
   "nba", "tech", "ai", "vc", "taiwan", "us-politics", "world", "business", "science", "media",
 ]);
 
-/** Creates the anonymous profile at onboarding and sets the identity cookie. */
+/** Creates or tunes the anonymous profile without adding an authentication gate. */
 export async function POST(req: NextRequest) {
   let interests: string[] = [];
   try {
@@ -20,7 +21,10 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getDb();
-  const [profile] = await db.insert(profiles).values({ interests }).returning();
+  const existingId = await getProfileId();
+  const [profile] = existingId
+    ? await db.update(profiles).set({ interests }).where(eq(profiles.id, existingId)).returning()
+    : await db.insert(profiles).values({ interests }).returning();
 
   const res = NextResponse.json({ ok: true });
   res.cookies.set(PROFILE_COOKIE, profile.id, {

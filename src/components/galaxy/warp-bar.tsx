@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WORLD_VISUALS } from "../../galaxy/worlds";
+import { categoryForTopics } from "../../lib/categories";
+import type { FeedItemDTO } from "../../lib/feed-data";
 
 export interface WarpTarget {
   kind: "world" | "story";
@@ -9,107 +11,95 @@ export interface WarpTarget {
   title: string;
   sub: string;
   color: string;
+  saved?: boolean;
 }
 
-/**
- * The escape hatch: type to jump anywhere without flying. 3D exploration is
- * for discovery; this is for when you already know what you want.
- * Opens with "/" (desktop) or the ⌕ HUD button (mobile).
- */
-export function WarpBar({
-  stories,
-  onWarp,
-  onClose,
-}: {
+function SearchIcon() {
+  return <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden><circle cx="8.5" cy="8.5" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m12 12 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>;
+}
+
+function CloseIcon() {
+  return <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden><path d="m5 5 10 10M15 5 5 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>;
+}
+
+export function WarpBar({ stories, onWarp, onClose }: {
   stories: { id: number; title: string; world: string; sourceName: string }[];
-  onWarp: (t: WarpTarget) => void;
+  onWarp: (target: WarpTarget) => void;
   onClose: () => void;
 }) {
-  const [q, setQ] = useState("");
+  const [query, setQuery] = useState("");
+  const [remoteStories, setRemoteStories] = useState<FeedItemDTO[]>([]);
+  const [loading, setLoading] = useState(false);
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
 
   useEffect(() => inputRef.current?.focus(), []);
+  useEffect(() => {
+    const needle = query.trim();
+    if (needle.length < 2) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setLoading(true);
+      fetch(`/api/search?q=${encodeURIComponent(needle)}`, { signal: controller.signal })
+        .then((response) => response.ok ? response.json() as Promise<{ stories: FeedItemDTO[] }> : { stories: [] })
+        .then((payload) => setRemoteStories(payload.stories))
+        .catch((error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) setRemoteStories([]); })
+        .finally(() => setLoading(false));
+    }, 180);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [query]);
 
-  const results = useMemo<WarpTarget[]>(() => {
-    const needle = q.trim().toLowerCase();
-    const worlds: WarpTarget[] = WORLD_VISUALS.filter(
-      (w) => needle === "" || w.label.toLowerCase().includes(needle) || w.slug.includes(needle),
-    ).map((w) => ({ kind: "world", id: w.slug, title: w.label, sub: "GALAXY", color: w.css }));
-    if (needle === "") return worlds;
-    const matches: WarpTarget[] = stories
-      .filter((s) => s.title.toLowerCase().includes(needle))
-      .slice(0, 8)
-      .map((s) => {
-        const visual = WORLD_VISUALS.find((w) => w.slug === s.world);
-        return {
-          kind: "story" as const,
-          id: s.id,
-          title: s.title,
-          sub: `${visual?.label.toUpperCase() ?? s.world} — ${s.sourceName.toUpperCase()}`,
-          color: visual?.css ?? "#9db0cc",
-        };
-      });
-    return [...worlds.slice(0, 3), ...matches];
-  }, [q, stories]);
+  const worldResults = useMemo<WarpTarget[]>(() => {
+    const needle = query.trim().toLowerCase();
+    return WORLD_VISUALS.filter((world) => !needle || world.label.toLowerCase().includes(needle) || world.slug.includes(needle))
+      .map((world) => ({ kind: "world", id: world.slug, title: world.label, sub: "WORLD", color: world.css }));
+  }, [query]);
 
-  const go = (t: WarpTarget | undefined) => {
-    if (t) onWarp(t);
+  const storyResults = useMemo<WarpTarget[]>(() => {
+    if (query.trim().length >= 2) return remoteStories.map((story) => {
+      const category = categoryForTopics(story.topics);
+      const visual = WORLD_VISUALS.find((world) => world.slug === category?.slug);
+      return { kind: "story", id: story.id, title: story.title, sub: `${story.sourceName} · ${category?.label ?? "NEWS"}`, color: visual?.css ?? "#8ba2ff", saved: story.saved };
+    });
+    return stories.slice(0, 6).map((story) => ({ kind: "story", id: story.id, title: story.title, sub: `${story.sourceName} · RECENT`, color: WORLD_VISUALS.find((world) => world.slug === story.world)?.css ?? "#8ba2ff" }));
+  }, [query, remoteStories, stories]);
+  const savedResults = storyResults.filter((result) => result.saved);
+  const regularResults = storyResults.filter((result) => !result.saved);
+  const results = [...worldResults, ...savedResults, ...regularResults];
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape") onClose();
+    if (event.key === "ArrowDown") { event.preventDefault(); setCursor((value) => Math.min(value + 1, results.length - 1)); }
+    if (event.key === "ArrowUp") { event.preventDefault(); setCursor((value) => Math.max(value - 1, 0)); }
+    if (event.key === "Enter" && results[cursor]) { event.preventDefault(); onWarp(results[cursor]); }
+    if (event.key === "Tab" && dialogRef.current) {
+      const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>("button, input, a[href]")].filter((element) => !element.hasAttribute("disabled"));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
   };
 
+  const renderGroup = (label: string, group: WarpTarget[], offset: number) => group.length ? <section className="search-results-group" aria-labelledby={`search-${label.toLowerCase()}`}><h3 id={`search-${label.toLowerCase()}`}>{label}</h3><ul>{group.map((result, index) => {
+    const globalIndex = offset + index;
+    return <li key={`${result.kind}-${result.id}`}><button type="button" onClick={() => onWarp(result)} onMouseEnter={() => setCursor(globalIndex)} className={globalIndex === cursor ? "is-active" : ""}><span className="search-result__dot" style={{ background: result.color }} aria-hidden /><span><strong>{result.title}</strong><small>{result.sub}</small></span></button></li>;
+  })}</ul></section> : null;
+
   return (
-    <div className="galaxy-drawer-scrim" onClick={onClose}>
-      <aside
-        className="galaxy-drawer search-drawer"
-        onClick={(e) => e.stopPropagation()}
-        aria-label="Search"
-      >
-        <header className="galaxy-drawer__header">
-          <div><span className="galaxy-drawer__eyebrow">Find your next signal</span><h2>Search</h2></div>
-          <button type="button" onClick={onClose} aria-label="Close search" title="Close search">×</button>
-        </header>
-        <div className="search-drawer__input">
-          <span className="text-[#565d78] text-sm" aria-hidden>
-            ⌕
-          </span>
-          <input
-            ref={inputRef}
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setCursor(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onClose();
-              if (e.key === "ArrowDown") setCursor((c) => Math.min(c + 1, results.length - 1));
-              if (e.key === "ArrowUp") setCursor((c) => Math.max(c - 1, 0));
-              if (e.key === "Enter") go(results[cursor]);
-              e.stopPropagation();
-            }}
-            placeholder="Search worlds and stories…"
-            className="flex-1 bg-transparent outline-none text-white font-mono text-[13px] placeholder:text-[#596073]"
-            aria-label="Warp search"
-          />
+    <div className="galaxy-drawer-scrim" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
+      <aside ref={dialogRef} className="galaxy-drawer search-drawer" role="dialog" aria-modal="true" aria-labelledby="search-title" onKeyDown={onKeyDown}>
+        <header className="galaxy-drawer__header"><div><span className="galaxy-drawer__eyebrow">Find your next signal</span><h2 id="search-title">Search</h2></div><button type="button" onClick={onClose} aria-label="Close search"><CloseIcon /></button></header>
+        <label className="search-drawer__input"><SearchIcon /><span className="sr-only">Search stories, sources, authors, topics, and worlds</span><input ref={inputRef} value={query} onChange={(event) => { const value = event.target.value; setQuery(value); setCursor(0); if (value.trim().length < 2) { setRemoteStories([]); setLoading(false); } }} placeholder="Stories, sources, authors, topics…" /></label>
+        <div className="search-drawer__results" aria-busy={loading}>
+          {renderGroup("Worlds", worldResults, 0)}
+          {renderGroup("Saved", savedResults, worldResults.length)}
+          {renderGroup("Stories", regularResults, worldResults.length + savedResults.length)}
+          {loading ? <div className="search-loading" role="status">Searching current stories…</div> : null}
+          {!loading && query.trim().length >= 2 && results.length === 0 ? <div className="galaxy-drawer__state">No current stories match that search.</div> : null}
         </div>
-        <ul className="search-drawer__results">
-          {results.map((r, i) => (
-            <li key={`${r.kind}-${r.id}`}>
-              <button
-                type="button"
-                onClick={() => go(r)}
-                onMouseEnter={() => setCursor(i)}
-                className={i === cursor ? "is-active" : ""}
-              >
-                <span className="w-2 h-2 shrink-0 self-center" style={{ background: r.color }} aria-hidden />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-display font-semibold text-white/90 truncate">{r.title}</span>
-                </span>
-                <span className="font-mono text-[8.5px] tracking-[0.14em] text-[#565d78] shrink-0">{r.sub}</span>
-              </button>
-            </li>
-          ))}
-          {results.length === 0 ? <li className="galaxy-drawer__state">No matches in this sky.</li> : null}
-        </ul>
       </aside>
     </div>
   );

@@ -26,6 +26,8 @@ const LATEST_WINDOW_MS = 12 * 3600_000;
 const LATEST_COUNT = 6;
 const FIRST_VISIT_NEW_WINDOW_MS = 6 * 3600_000;
 const WORLD_ENTRY_LIMIT = 28;
+const BRIEFING_ESSENTIAL_COUNT = 8;
+const BRIEFING_MORE_COUNT = 20;
 
 /** Deliberately excludes `contentHtml`, the former multi-megabyte hot-path field. */
 const ITEM_SUMMARY_FIELDS = {
@@ -275,6 +277,110 @@ export interface GalaxyData {
   };
 }
 
+export interface BriefingWorldSummary {
+  slug: string;
+  label: string;
+  affinity: number;
+  activity: number;
+  breaking: boolean;
+  newCount: number;
+}
+
+/** Lightweight first paint payload. The universe hydrates independently. */
+export interface BriefingPayload {
+  essentialIds: number[];
+  moreIds: number[];
+  stories: Record<string, GalaxyStoryDTO>;
+  worlds: BriefingWorldSummary[];
+  updatedAt: string | null;
+  lastVisitAt: string | null;
+  newCount: number;
+  freshness: GalaxyData["freshness"];
+}
+
+function sourceFreshness(activeSources: Array<{ lastSuccessfulFetchAt: Date | null; pollIntervalMinutes: number }>, now: Date) {
+  const successfulChecks = activeSources.flatMap((source) => source.lastSuccessfulFetchAt ? [source.lastSuccessfulFetchAt] : []);
+  return {
+    latestCheckedAt: successfulChecks.length > 0 ? new Date(Math.max(...successfulChecks.map((date) => date.getTime()))).toISOString() : null,
+    oldestCheckedAt: successfulChecks.length > 0 ? new Date(Math.min(...successfulChecks.map((date) => date.getTime()))).toISOString() : null,
+    staleSourceCount: activeSources.filter((source) => {
+      if (!source.lastSuccessfulFetchAt) return true;
+      return now.getTime() - source.lastSuccessfulFetchAt.getTime() > Math.max(15, source.pollIntervalMinutes * 2) * 60_000;
+    }).length,
+    totalSources: activeSources.length,
+  };
+}
+
+export async function loadBriefing(profile: Profile): Promise<BriefingPayload> {
+  const { candidates, affinityMap, savedIds, readIds, activeSources } = await loadCandidateBundle(profile);
+  const now = new Date();
+  const newSince = profile.lastFeedOpenedAt ?? new Date(now.getTime() - FIRST_VISIT_NEW_WINDOW_MS);
+  const ranked = rankFeed({
+    candidates,
+    affinities: affinityMap,
+    seedInterests: profile.interests,
+    now,
+    opts: { limit: BRIEFING_ESSENTIAL_COUNT + BRIEFING_MORE_COUNT },
+  }).map((entry) => toDTO(entry, savedIds, readIds, newSince));
+  const readingOrder = [...ranked.filter((entry) => !entry.read), ...ranked.filter((entry) => entry.read)];
+  const essential = readingOrder.slice(0, BRIEFING_ESSENTIAL_COUNT);
+  const more = readingOrder.slice(BRIEFING_ESSENTIAL_COUNT);
+  const visible = [...essential, ...more];
+
+  const worlds = CATEGORIES.slice(1).map((category) => {
+    const scopedCandidates = candidates.filter((candidate) => candidate.item.topics.some((topic) => category.topics.includes(topic)));
+    const scopedEntries = visible.filter((entry) => entry.topics.some((topic) => category.topics.includes(topic)));
+    const weight = category.topics.reduce((sum, topic) => {
+      const affinity = affinityMap.get(affinityKey("topic", topic));
+      return sum + Math.max(0, affinity?.weight ?? 0);
+    }, 0);
+    return {
+      slug: category.slug,
+      label: category.label,
+      affinity: Math.tanh(weight / 6),
+      activity: activityIndex(scopedCandidates.map((candidate) => ({ publishedAt: candidate.item.publishedAt })), now.getTime()),
+      breaking: isBreaking(scopedEntries, now.getTime()),
+      newCount: scopedEntries.filter((entry) => entry.isNew && !entry.read).length,
+    };
+  });
+
+  const updatedAt = candidates.length > 0
+    ? candidates.reduce((max, candidate) => candidate.item.updatedAt > max ? candidate.item.updatedAt : max, candidates[0].item.updatedAt).toISOString()
+    : null;
+  const newCount = candidates.filter((candidate) => candidate.item.publishedAt > newSince && !readIds.has(candidate.item.id)).length;
+
+  return {
+    essentialIds: essential.map((entry) => entry.id),
+    moreIds: more.map((entry) => entry.id),
+    stories: Object.fromEntries(visible.map((entry) => [String(entry.id), toGalaxyStory(entry)])),
+    worlds,
+    updatedAt,
+    lastVisitAt: profile.lastFeedOpenedAt?.toISOString() ?? null,
+    newCount,
+    freshness: sourceFreshness(activeSources, now),
+  };
+}
+
+export async function searchFeed(profile: Profile, query: string, limit = 20): Promise<FeedItemDTO[]> {
+  const needle = query.trim().toLowerCase();
+  if (needle.length < 2) return [];
+  const { candidates, affinityMap, savedIds, readIds } = await loadCandidateBundle(profile);
+  const matches = candidates.filter(({ item, source }) => [
+    item.title,
+    item.author ?? "",
+    source.name,
+    ...item.topics,
+  ].some((value) => value.toLowerCase().includes(needle)));
+  const now = new Date();
+  return rankFeed({
+    candidates: matches,
+    affinities: affinityMap,
+    seedInterests: profile.interests,
+    now,
+    opts: { limit },
+  }).map((entry) => toDTO(entry, savedIds, readIds));
+}
+
 export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
   const { candidates, affinityMap, savedIds, readIds, activeSources } = await loadCandidateBundle(profile);
   const now = new Date();
@@ -315,11 +421,6 @@ export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
   const updatedAt = candidates.length > 0
     ? candidates.reduce((max, candidate) => candidate.item.updatedAt > max ? candidate.item.updatedAt : max, candidates[0].item.updatedAt).toISOString()
     : null;
-  const successfulChecks = activeSources.flatMap((source) => source.lastSuccessfulFetchAt ? [source.lastSuccessfulFetchAt] : []);
-  const staleSourceCount = activeSources.filter((source) => {
-    if (!source.lastSuccessfulFetchAt) return true;
-    return now.getTime() - source.lastSuccessfulFetchAt.getTime() > Math.max(15, source.pollIntervalMinutes * 2) * 60_000;
-  }).length;
 
   const stories = Object.fromEntries(new Map(visible.map((entry) => [String(entry.id), toGalaxyStory(entry)])));
   const toWireWorld = ({ entries, ...world }: WorldData): GalaxyWorldWireData => ({
@@ -336,26 +437,24 @@ export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
     lastVisitAt: profile.lastFeedOpenedAt?.toISOString() ?? null,
     newCount: uniqueNew.size,
     catchUpIds: catchUp.map((entry) => entry.id),
-    freshness: {
-      latestCheckedAt: successfulChecks.length > 0 ? new Date(Math.max(...successfulChecks.map((date) => date.getTime()))).toISOString() : null,
-      oldestCheckedAt: successfulChecks.length > 0 ? new Date(Math.min(...successfulChecks.map((date) => date.getTime()))).toISOString() : null,
-      staleSourceCount,
-      totalSources: activeSources.length,
-    },
+    freshness: sourceFreshness(activeSources, now),
   };
 }
 
 export async function loadSaved(profile: Profile): Promise<FeedItemDTO[]> {
   const db = getDb();
-  const rows = await db
-    .select({ item: ITEM_SUMMARY_FIELDS, source: sources, savedAt: saves.createdAt })
-    .from(saves)
-    .innerJoin(items, eq(saves.itemId, items.id))
-    .innerJoin(sources, eq(items.sourceId, sources.id))
-    .where(eq(saves.profileId, profile.id))
-    .orderBy(desc(saves.createdAt));
+  const [rows, readIds] = await Promise.all([
+    db
+      .select({ item: ITEM_SUMMARY_FIELDS, source: sources, savedAt: saves.createdAt })
+      .from(saves)
+      .innerJoin(items, eq(saves.itemId, items.id))
+      .innerJoin(sources, eq(items.sourceId, sources.id))
+      .where(eq(saves.profileId, profile.id))
+      .orderBy(desc(saves.createdAt)),
+    loadReadIds(profile.id),
+  ]);
   const savedIds = new Set(rows.map((row) => row.item.id));
-  return rows.map((row) => toDTO({ item: row.item, source: row.source, score: 0 }, savedIds));
+  return rows.map((row) => toDTO({ item: row.item, source: row.source, score: 0 }, savedIds, readIds));
 }
 
 export interface SourceWithState {

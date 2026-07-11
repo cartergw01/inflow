@@ -272,7 +272,7 @@ export class GalaxyEngine {
     this.cb = cb;
     this.data = data;
     this.isMobile = opts.isMobile;
-    this.radius = opts.isMobile ? 80 : 72;
+    this.radius = opts.isMobile ? 110 : 72;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.isMobile, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -351,39 +351,256 @@ export class GalaxyEngine {
       group.add(m);
       return m;
     };
+    const line = (geo: THREE.BufferGeometry, color: number, opacity = 1) => {
+      const object = new THREE.LineSegments(
+        geo,
+        new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: false }),
+      );
+      group.add(object);
+      return object;
+    };
 
     switch (visual.core) {
-      case "sun":
-        mk(new THREE.SphereGeometry(1.7, 40, 40), 0xf0e2b0);
+      case "sun": {
+        mk(new THREE.SphereGeometry(1.7, 40, 40), 0xe5ce7a);
+        const facets = mk(new THREE.IcosahedronGeometry(1.76, 2), 0xffefb2, 0.18);
+        (facets.material as THREE.MeshBasicMaterial).wireframe = true;
+        const meridian = mk(new THREE.TorusGeometry(2.12, 0.018, 5, 96), 0xd9c26a, 0.34);
+        meridian.rotation.x = Math.PI / 2;
         break;
+      }
       case "arena": {
-        mk(new THREE.SphereGeometry(1.1 * scale, 28, 28), 0x3a2413);
-        const ring = mk(new THREE.RingGeometry(2.6 * scale, 3.1 * scale, 96), visual.color, 0.2);
+        const radius = 1.42 * scale;
+        mk(new THREE.SphereGeometry(radius, 36, 28), 0xa94f20);
+        const grain = mk(new THREE.SphereGeometry(radius * 1.005, 20, 14), 0xe7904f, 0.18);
+        (grain.material as THREE.MeshBasicMaterial).wireframe = true;
+
+        // Raised great-circle seams make the core read as a basketball even
+        // when the overview has zoomed far out.
+        const seamRotations: Array<[number, number, number]> = [
+          [Math.PI / 2, 0, 0],
+          [0, Math.PI / 2, 0],
+          [0.3, 0.82, 0.18],
+          [-0.28, -0.82, -0.18],
+        ];
+        for (const [x, y, z] of seamRotations) {
+          const seam = mk(new THREE.TorusGeometry(radius * 1.01, 0.035 * scale, 6, 72), 0x28130d, 0.92);
+          seam.rotation.set(x, y, z);
+        }
+
+        const ring = mk(new THREE.RingGeometry(2.45 * scale, 3.18 * scale, 96), visual.color, 0.13);
         ring.rotation.x = Math.PI / 2 - 0.42;
+        const court = line(new THREE.EdgesGeometry(new THREE.BoxGeometry(2.4 * scale, 0.02, 1.25 * scale)), 0xf2c9a0, 0.22);
+        court.rotation.x = -0.42;
         break;
       }
       case "lattice": {
-        const ico = mk(new THREE.IcosahedronGeometry(1.15 * scale, 0), 0x0d3a30);
-        ico.add(
-          new THREE.Mesh(
-            new THREE.IcosahedronGeometry(1.16 * scale, 0),
-            new THREE.MeshBasicMaterial({ color: visual.color, wireframe: true, transparent: true, opacity: 0.35 }),
+        const chip = new THREE.Group();
+        chip.rotation.set(0.42, 0.62, 0.08);
+        group.add(chip);
+        const bodySize = 1.78 * scale;
+        chip.add(new THREE.Mesh(new THREE.BoxGeometry(bodySize, bodySize, bodySize), new THREE.MeshBasicMaterial({ color: 0x0b342f })));
+        chip.add(
+          new THREE.LineSegments(
+            new THREE.EdgesGeometry(new THREE.BoxGeometry(bodySize * 1.02, bodySize * 1.02, bodySize * 1.02)),
+            new THREE.LineBasicMaterial({ color: visual.color, transparent: true, opacity: 0.72 }),
           ),
         );
+        const die = new THREE.Mesh(
+          new THREE.BoxGeometry(0.78 * scale, 0.78 * scale, 0.78 * scale),
+          new THREE.MeshBasicMaterial({ color: 0x5de0cc }),
+        );
+        chip.add(die);
+
+        const pinCount = 24;
+        const pins = new THREE.InstancedMesh(
+          new THREE.BoxGeometry(0.48 * scale, 0.075 * scale, 0.075 * scale),
+          new THREE.MeshBasicMaterial({ color: 0x89eadc }),
+          pinCount,
+        );
+        const matrix = new THREE.Matrix4();
+        let pin = 0;
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < 6; i++) {
+            const offset = (i - 2.5) * 0.25 * scale;
+            matrix.makeRotationZ(0).setPosition(side * 1.08 * scale, offset, 0);
+            pins.setMatrixAt(pin++, matrix);
+            matrix.makeRotationY(Math.PI / 2).setPosition(0, offset, side * 1.08 * scale);
+            pins.setMatrixAt(pin++, matrix);
+          }
+        }
+        pins.instanceMatrix.needsUpdate = true;
+        chip.add(pins);
         break;
       }
-      case "isle":
-        mk(new THREE.SphereGeometry(1.15 * scale, 28, 28), 0x11402a);
+      case "isle": {
+        const island = new THREE.Group();
+        island.rotation.set(-0.18, -0.34, -0.14);
+        group.add(island);
+
+        const shape = new THREE.Shape();
+        const outline: Array<[number, number]> = [
+          [0.02, 1.72], [0.25, 1.42], [0.36, 1.08], [0.48, 0.67], [0.43, 0.28],
+          [0.3, -0.16], [0.13, -0.62], [-0.02, -1.12], [-0.22, -1.72], [-0.4, -1.38],
+          [-0.5, -0.88], [-0.48, -0.37], [-0.39, 0.16], [-0.29, 0.72], [-0.17, 1.28],
+        ];
+        shape.moveTo(outline[0][0] * scale, outline[0][1] * scale);
+        for (const [x, y] of outline.slice(1)) shape.lineTo(x * scale, y * scale);
+        shape.closePath();
+        const islandGeometry = new THREE.ExtrudeGeometry(shape, {
+          depth: 0.28 * scale,
+          bevelEnabled: true,
+          bevelSegments: 2,
+          bevelSize: 0.055 * scale,
+          bevelThickness: 0.055 * scale,
+        });
+        islandGeometry.center();
+        island.add(new THREE.Mesh(islandGeometry, new THREE.MeshBasicMaterial({ color: 0x1d5a3c })));
+        island.add(
+          new THREE.LineSegments(
+            new THREE.EdgesGeometry(islandGeometry, 22),
+            new THREE.LineBasicMaterial({ color: 0x91e6ad, transparent: true, opacity: 0.78 }),
+          ),
+        );
+
+        // A bright central ridge and nested chart rings carry the island's
+        // topography without relying on a photographic texture.
+        const ridgePoints = [
+          new THREE.Vector3(-0.08, 1.23, 0.2),
+          new THREE.Vector3(0.08, 0.62, 0.2),
+          new THREE.Vector3(-0.08, 0.02, 0.2),
+          new THREE.Vector3(-0.18, -0.63, 0.2),
+          new THREE.Vector3(-0.22, -1.22, 0.2),
+        ].map((point) => point.multiplyScalar(scale));
+        island.add(
+          new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(ridgePoints),
+            new THREE.LineBasicMaterial({ color: 0xc6f3d2, transparent: true, opacity: 0.62 }),
+          ),
+        );
+        const chartRing = new THREE.Mesh(
+          new THREE.RingGeometry(1.84 * scale, 1.92 * scale, 72),
+          new THREE.MeshBasicMaterial({ color: 0x5fbf8a, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }),
+        );
+        chartRing.position.z = -0.28 * scale;
+        island.add(chartRing);
+
+        const lanternPositions: Array<[number, number]> = [[-1.52, 0.82], [1.48, 0.55], [-1.42, -0.92], [1.38, -1.05]];
+        for (const [x, y] of lanternPositions) {
+          const lantern = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.1 * scale, 0.13 * scale, 0.27 * scale, 6),
+            new THREE.MeshBasicMaterial({ color: 0xe5a064 }),
+          );
+          lantern.position.set(x * scale, y * scale, 0.08 * scale);
+          island.add(lantern);
+        }
         break;
+      }
       case "rotunda": {
-        mk(new THREE.SphereGeometry(1.05 * scale, 28, 28, 0, Math.PI * 2, 0, Math.PI / 2), 0xb9c4e8);
-        const base = mk(new THREE.CylinderGeometry(1.05 * scale, 1.05 * scale, 0.2 * scale, 32), 0x232c58);
-        base.position.y = -0.02;
+        const civic = new THREE.Group();
+        group.add(civic);
+        const base = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.48 * scale, 1.58 * scale, 0.3 * scale, 40),
+          new THREE.MeshBasicMaterial({ color: 0x25345f }),
+        );
+        base.position.y = -0.62 * scale;
+        civic.add(base);
+
+        const columns = new THREE.InstancedMesh(
+          new THREE.CylinderGeometry(0.065 * scale, 0.075 * scale, 0.82 * scale, 8),
+          new THREE.MeshBasicMaterial({ color: 0xdde3f5 }),
+          16,
+        );
+        const matrix = new THREE.Matrix4();
+        for (let i = 0; i < 16; i++) {
+          const angle = (i / 16) * Math.PI * 2;
+          matrix.makeTranslation(Math.cos(angle) * 1.16 * scale, -0.12 * scale, Math.sin(angle) * 1.16 * scale);
+          columns.setMatrixAt(i, matrix);
+        }
+        columns.instanceMatrix.needsUpdate = true;
+        civic.add(columns);
+
+        const entablature = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.34 * scale, 1.34 * scale, 0.18 * scale, 40),
+          new THREE.MeshBasicMaterial({ color: 0x94a8dd }),
+        );
+        entablature.position.y = 0.34 * scale;
+        civic.add(entablature);
+        const dome = new THREE.Mesh(
+          new THREE.SphereGeometry(1.02 * scale, 36, 20, 0, Math.PI * 2, 0, Math.PI / 2),
+          new THREE.MeshBasicMaterial({ color: 0xc7d1ee }),
+        );
+        dome.position.y = 0.42 * scale;
+        civic.add(dome);
+        const domeLines = new THREE.LineSegments(
+          new THREE.EdgesGeometry(new THREE.SphereGeometry(1.035 * scale, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2)),
+          new THREE.LineBasicMaterial({ color: 0x6e86ce, transparent: true, opacity: 0.42 }),
+        );
+        domeLines.position.y = 0.42 * scale;
+        civic.add(domeLines);
+        const cupola = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.2 * scale, 0.26 * scale, 0.38 * scale, 12),
+          new THREE.MeshBasicMaterial({ color: 0xe8edfb }),
+        );
+        cupola.position.y = 1.45 * scale;
+        civic.add(cupola);
+        const spire = new THREE.Mesh(
+          new THREE.ConeGeometry(0.1 * scale, 0.38 * scale, 10),
+          new THREE.MeshBasicMaterial({ color: 0xa9b9e2 }),
+        );
+        spire.position.y = 1.82 * scale;
+        civic.add(spire);
         break;
       }
-      case "globe":
-        mk(new THREE.SphereGeometry(1.15 * scale, 28, 28), 0x2c3b55);
+      case "globe": {
+        const canvas = document.createElement("canvas");
+        canvas.width = 512;
+        canvas.height = 256;
+        const context = canvas.getContext("2d");
+        if (!context) break;
+        context.fillStyle = "#17243b";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.strokeStyle = "rgba(157,176,204,.22)";
+        context.lineWidth = 1;
+        for (let x = 0; x <= 512; x += 64) {
+          context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 256); context.stroke();
+        }
+        for (let y = 32; y < 256; y += 32) {
+          context.beginPath(); context.moveTo(0, y); context.lineTo(512, y); context.stroke();
+        }
+        context.fillStyle = "#8fa9c6";
+        context.strokeStyle = "rgba(232,242,250,.68)";
+        context.lineWidth = 1.2;
+        const mapPoint = ([longitude, latitude]: [number, number]): [number, number] => [
+          ((longitude + 180) / 360) * canvas.width,
+          ((90 - latitude) / 180) * canvas.height,
+        ];
+        const landmass = (coordinates: Array<[number, number]>) => {
+          const points = coordinates.map(mapPoint);
+          context.beginPath();
+          context.moveTo(points[0][0], points[0][1]);
+          for (const [x, y] of points.slice(1)) context.lineTo(x, y);
+          context.closePath();
+          context.fill();
+          context.stroke();
+        };
+        landmass([[-168, 72], [-145, 72], [-126, 58], [-105, 52], [-83, 25], [-96, 16], [-113, 29], [-126, 43], [-148, 57]]);
+        landmass([[-82, 13], [-65, 9], [-49, -12], [-57, -31], [-70, -56], [-78, -31], [-82, -5]]);
+        landmass([[-63, 79], [-30, 82], [-20, 72], [-42, 58], [-61, 64]]);
+        landmass([[-12, 71], [28, 72], [65, 77], [112, 72], [166, 60], [145, 42], [121, 20], [103, 8], [77, 24], [51, 5], [34, 28], [18, 42], [-2, 36], [-12, 54]]);
+        landmass([[-18, 35], [10, 38], [36, 29], [45, 7], [28, -35], [7, -35], [-10, -6]]);
+        landmass([[112, -11], [154, -10], [151, -38], [127, -43], [112, -25]]);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        const globe = mk(new THREE.SphereGeometry(1.48 * scale, 40, 28), 0xffffff);
+        (globe.material as THREE.MeshBasicMaterial).map = texture;
+        (globe.material as THREE.MeshBasicMaterial).needsUpdate = true;
+        globe.rotation.set(0.08, 0.85, -0.18);
+        const grid = mk(new THREE.SphereGeometry(1.495 * scale, 18, 12), visual.color, 0.24);
+        (grid.material as THREE.MeshBasicMaterial).wireframe = true;
+        grid.rotation.copy(globe.rotation);
         break;
+      }
     }
 
     // thin orbital reference lanes
@@ -409,6 +626,7 @@ export class GalaxyEngine {
 
     const group = new THREE.Group();
     group.position.copy(TMP.copy(worldPosition(visual, world.affinity) as THREE.Vector3Like));
+    if (this.isMobile && world.slug !== "today") group.position.multiplyScalar(0.72);
     this.scene.add(group);
     this.worldGroups.set(world.slug, group);
     this.byWorldIndex.set(world.slug, world.entries);
@@ -718,7 +936,7 @@ export class GalaxyEngine {
     this.clearFocus();
     this.view = null;
     this.cb.onView(null);
-    this.flyTo({ target: new THREE.Vector3(0, 0, 0), theta: this.theta - 0.5, phi: 1.12, radius: this.isMobile ? 80 : 72 }, 900);
+    this.flyTo({ target: new THREE.Vector3(0, 0, 0), theta: this.theta - 0.5, phi: 1.12, radius: this.isMobile ? 110 : 72 }, 900);
   }
 
   focusStory(id: number) {
@@ -791,7 +1009,7 @@ export class GalaxyEngine {
         target: g ? g.position.clone() : new THREE.Vector3(),
         theta: this.theta,
         phi: this.phi,
-        radius: g ? (this.isMobile ? 19 : 14) * Math.max(scale, 0.8) : this.isMobile ? 80 : 72,
+        radius: g ? (this.isMobile ? 19 : 14) * Math.max(scale, 0.8) : this.isMobile ? 110 : 72,
       },
       520,
     );
@@ -927,20 +1145,22 @@ export class GalaxyEngine {
           opacity: 1,
         });
       }
-      for (const bridge of this.bridges.filter((entry) => entry.prominent)) {
-        const p = project(bridge.mid.clone());
-        if (!p) continue;
-        labels.push({
-          key: `b-${bridge.bridge.storyId}`,
-          kind: "bridge",
-          text: bridge.bridge.title.length > 42 ? `${bridge.bridge.title.slice(0, 42).trimEnd()}…` : bridge.bridge.title,
-          sub: `${bridge.bridge.a.toUpperCase()} × ${bridge.bridge.b.toUpperCase()}`,
-          color: "#aac8de",
-          x: p.x,
-          y: p.y,
-          opacity: 0.78,
-          storyId: bridge.bridge.storyId,
-        });
+      if (!this.isMobile) {
+        for (const bridge of this.bridges.filter((entry) => entry.prominent)) {
+          const p = project(bridge.mid.clone());
+          if (!p) continue;
+          labels.push({
+            key: `b-${bridge.bridge.storyId}`,
+            kind: "bridge",
+            text: bridge.bridge.title.length > 42 ? `${bridge.bridge.title.slice(0, 42).trimEnd()}…` : bridge.bridge.title,
+            sub: `${bridge.bridge.a.toUpperCase()} × ${bridge.bridge.b.toUpperCase()}`,
+            color: "#aac8de",
+            x: p.x,
+            y: p.y,
+            opacity: 0.78,
+            storyId: bridge.bridge.storyId,
+          });
+        }
       }
     } else {
       const entries = this.byWorldIndex.get(this.view) ?? [];

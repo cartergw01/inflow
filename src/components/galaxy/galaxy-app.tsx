@@ -12,7 +12,7 @@ import type { LibraryTab } from "./library-drawer";
 import type { ReaderPayload } from "./reader-overlay";
 import type { WarpTarget } from "./warp-bar";
 
-const STATE_KEY = "inflow-galaxy-state";
+const STATE_KEY = "inflow-galaxy-state-v2";
 const CONTROLS_SEEN_KEY = "inflow-controls-seen";
 const ReaderOverlay = dynamic(() => import("./reader-overlay").then((mod) => mod.ReaderOverlay));
 const WarpBar = dynamic(() => import("./warp-bar").then((mod) => mod.WarpBar));

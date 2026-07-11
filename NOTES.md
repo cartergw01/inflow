@@ -22,6 +22,10 @@ The galaxy query no longer loads article HTML for hundreds of candidates. It fet
 
 The spatial metaphor stays, but interaction is now tap/click to select, drag to pan in the camera plane, and wheel/pinch to zoom. Hover affordances, persistent labeled Search and Full galaxy controls, a source-freshness HUD, and a sub-10-second first-use hint make the controls discoverable. The hint never blocks the app and does not create an onboarding gate. Rejected: custom orbit/swipe navigation, hiding labels for visual minimalism, and forcing interest setup before the first useful screen. New-since-last-open is based on the profile's prior feed-open timestamp and appears as both world counts and a catch-up action.
 
+## Topic worlds become recognizable objects, not colored spheres (2026-07-12)
+
+The Observatory's restraint had crossed into sterility: layouts differed by topic, but the world cores still read mostly as tinted geometry. An ImageGen visual-development pass established a clearer silhouette grammar, then the production scene translated it into lightweight procedural Three.js: NBA is a seamed basketball inside a court orbit; Tech / VC is a pinned silicon die; Taiwan is an extruded island silhouette with a central ridge and lantern satellites; US Politics is a columned civic dome; World is a mapped orbital globe. The overview remains still and instrument-like—no texture-heavy photoreal planets, party branding, flags, ambient rotation, or added postprocessing. Mobile uses a tighter map radius and wider camera framing so the thematic cores remain visible in portrait.
+
 ## Substack ingestion via per-publication RSS — full content, free, within terms
 
 Substack has no public API, but every publication serves RSS at `<pub>.substack.com/feed` (or the custom domain + `/feed`) including `content:encoded` with complete article HTML (verified against live feeds 2026-07-02). Paywalled posts include only the free preview — which is what Substack chooses to publish in the feed, so it's within terms. This makes Substack a first-class v1 source with in-app full-text reading for free posts.

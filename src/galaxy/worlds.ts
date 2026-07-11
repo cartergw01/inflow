@@ -77,9 +77,9 @@ export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "nba",
     label: "NBA",
-    color: 0xd98d4f,
-    altColor: 0xf2c9a0,
-    css: "#d98d4f",
+    color: 0xe2762d,
+    altColor: 0xf3b278,
+    css: "#e2762d",
     core: "arena",
     angle: (210 / 360) * TAU,
     lanes: [
@@ -103,9 +103,9 @@ export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "tech",
     label: "Tech / VC",
-    color: 0x4fc9ae,
-    altColor: 0xbfeee2,
-    css: "#4fc9ae",
+    color: 0x45d2c0,
+    altColor: 0xb8f1e8,
+    css: "#45d2c0",
     core: "lattice",
     angle: (30 / 360) * TAU,
     lanes: [], // the grid is the identity — no circular lanes
@@ -127,9 +127,9 @@ export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "taiwan",
     label: "Taiwan",
-    color: 0x5fbf8a,
-    altColor: 0xd88a63,
-    css: "#5fbf8a",
+    color: 0x67c88e,
+    altColor: 0xe5a064,
+    css: "#67c88e",
     core: "isle",
     angle: (330 / 360) * TAU,
     lanes: [{ r: 4.2, tiltX: 0.18 }],
@@ -143,9 +143,9 @@ export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "politics",
     label: "US Politics",
-    color: 0x7d96e8,
-    altColor: 0xdde3f5,
-    css: "#7d96e8",
+    color: 0x8aa2ee,
+    altColor: 0xe3e9f8,
+    css: "#8aa2ee",
     core: "rotunda",
     angle: (150 / 360) * TAU,
     lanes: [
@@ -168,9 +168,9 @@ export const WORLD_VISUALS: WorldVisual[] = [
   {
     slug: "world",
     label: "World",
-    color: 0x9db0cc,
-    altColor: 0xe8eefc,
-    css: "#9db0cc",
+    color: 0x9ec5e3,
+    altColor: 0xe8f2fa,
+    css: "#9ec5e3",
     core: "globe",
     angle: (90 / 360) * TAU,
     lanes: [

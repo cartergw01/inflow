@@ -36,6 +36,8 @@ export function ReaderOverlay({
 }) {
   const [saved, setSaved] = useState(item.saved);
   const [noted, setNoted] = useState<"more" | "less" | null>(null);
+  const [progress, setProgress] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const visibleMs = useRef(0);
   const visibleSince = useRef<number | null>(null);
 
@@ -75,18 +77,31 @@ export function ReaderOverlay({
     setTimeout(() => setNoted(null), 1500);
   };
 
+  const updateProgress = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const scrollable = el.scrollHeight - el.clientHeight;
+    setProgress(scrollable > 0 ? Math.min(1, el.scrollTop / scrollable) : 1);
+  };
+
   return (
-    <div className="fixed inset-0 z-40 flex justify-center overflow-y-auto bg-black/[0.62] backdrop-blur-[8px] animate-[reader-in_260ms_ease-out]">
-      <article className="w-full max-w-[760px] min-h-full bg-[#0a0b10]/[0.96] border-x border-white/10 shadow-[0_0_120px_rgba(0,0,0,0.55)] px-6 sm:px-10 pt-6 pb-24">
-        <div className="flex items-center justify-between sticky top-0 bg-[#0a0b10]/[0.96] backdrop-blur-md py-3 border-b border-white/10 z-10">
+    <div
+      ref={scrollRef}
+      onScroll={updateProgress}
+      className="reader-surface fixed inset-0 z-40 overflow-y-auto bg-[#090a0d] animate-[reader-in_220ms_ease-out]"
+    >
+      <div className="reader-progress" style={{ transform: `scaleX(${progress})`, background: accent }} aria-hidden />
+      <div className="reader-toolbar sticky top-0 z-10">
+        <div className="reader-toolbar__inner">
           <button
             type="button"
             onClick={close}
-            className="cursor-pointer font-mono text-[0.65rem] tracking-[0.16em] uppercase text-white/60 hover:text-white transition-colors"
+            className="reader-toolbar__back"
           >
-            ← Back to space
+            ← Briefing
           </button>
-          <div className="flex items-center gap-5 font-mono text-[0.65rem] tracking-[0.14em] uppercase">
+          <span className="reader-toolbar__source">{item.sourceName}</span>
+          <div className="reader-toolbar__actions">
             <button
               type="button"
               onClick={() => {
@@ -97,68 +112,57 @@ export function ReaderOverlay({
               className="cursor-pointer transition-colors"
               style={{ color: saved ? "#ffd66b" : "rgba(255,255,255,0.6)" }}
             >
-              {saved ? "Saved ✓" : "Save"}
+              {saved ? "Saved" : "Save"}
             </button>
-            {noted ? (
-              <span style={{ color: accent }}>{noted === "more" ? "More ✓" : "Less ✓"}</span>
-            ) : (
-              <>
-                <button type="button" onClick={() => note("more")} className="cursor-pointer text-white/60 hover:text-white">
-                  More
-                </button>
-                <button type="button" onClick={() => note("less")} className="cursor-pointer text-white/60 hover:text-white">
-                  Less
-                </button>
-              </>
-            )}
             <a
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
               className="text-white/60 hover:text-white transition-colors"
             >
-              Original ↗
+              Original <span aria-hidden>↗</span>
             </a>
           </div>
         </div>
+      </div>
 
-        <div className="mt-8">
-          <div className="flex items-center gap-2.5 font-mono text-[0.65rem] tracking-[0.2em] uppercase" style={{ color: accent }}>
-            <span>{item.topics.map(topicLabel).join(" / ") || item.sourceName}</span>
-            <span className="flex-1 h-[2px]" style={{ background: accent }} aria-hidden />
+      <article className="reader-article">
+        <header className="reader-article__header">
+          <div className="reader-article__topic" style={{ color: accent }}>
+            {item.topics.map(topicLabel).join(" / ") || item.sourceName}
           </div>
-          <h1 className="mt-4 font-display font-black text-[28px] sm:text-[38px] leading-[1.04] tracking-[-0.03em] text-white">
+          <h1>
             {item.title}
           </h1>
-          <div className="mt-4 pb-5 border-b border-white/15 font-mono text-[0.625rem] tracking-[0.1em] uppercase text-white/45">
+          <div className="reader-article__byline">
             <span className="text-white/70">{item.sourceName}</span>
             {item.author ? <> — {item.author}</> : null}
             <> — {fullDate(item.publishedAt)}</>
           </div>
+        </header>
 
-          {item.contentHtml ? (
-            <div
-              className="reader-body reader-body-dark mt-8"
-              dangerouslySetInnerHTML={{ __html: item.contentHtml }}
-            />
+        {item.contentHtml ? (
+          <div className="reader-body reader-body-dark" dangerouslySetInnerHTML={{ __html: item.contentHtml }} />
+        ) : (
+          <div className="reader-article__fallback">
+            {item.excerpt ? <p>{item.excerpt}</p> : null}
+            <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={() => sendSignal({ itemId: item.id, type: "open" })} style={{ background: accent }}>
+              Read at {item.sourceName} <span aria-hidden>↗</span>
+            </a>
+          </div>
+        )}
+
+        <footer className="reader-feedback">
+          <p>Should InFlow bring you more stories like this?</p>
+          {noted ? (
+            <span style={{ color: accent }}>Preference noted</span>
           ) : (
-            <div className="mt-9">
-              {item.excerpt ? (
-                <p className="text-[17px] leading-[1.6] text-white/75 max-w-[60ch]">{item.excerpt}</p>
-              ) : null}
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => sendSignal({ itemId: item.id, type: "open" })}
-                className="mt-9 inline-block font-display font-black text-[14px] tracking-[0.05em] uppercase px-7 py-3 text-black transition-opacity hover:opacity-90"
-                style={{ background: accent }}
-              >
-                Read at {item.sourceName} ↗
-              </a>
+            <div>
+              <button type="button" onClick={() => note("more")}>More like this</button>
+              <button type="button" onClick={() => note("less")}>Less like this</button>
             </div>
           )}
-        </div>
+        </footer>
       </article>
     </div>
   );

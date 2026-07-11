@@ -2,133 +2,110 @@
 
 import { useState } from "react";
 import type { GalaxyStory } from "../../galaxy/engine";
-import { controversy, discussionVelocity } from "../../galaxy/metrics";
 import { timeAgo } from "../../lib/format";
 import { sendSignal } from "../../lib/signals-client";
 
-/**
- * The tethered story card — appears beside a focused story object. Carries
- * the full signal vocabulary (save / more / less / mute source) plus the
- * dive into reading. On small screens it docks as a bottom sheet.
- */
-export function FocusCard({
+/** A stable editorial briefing: one ranked story at a time, with tuning kept secondary. */
+export function StoryBriefing({
   story,
   accent,
-  x,
-  y,
-  isMobile,
-  fresh,
+  worldLabel,
+  position,
+  total,
   onRead,
+  onPrevious,
+  onNext,
   onMuteSource,
   onSaveChange,
 }: {
   story: GalaxyStory;
   accent: string;
-  x: number;
-  y: number;
-  isMobile: boolean;
-  /** Published within the last hour — computed by the caller (event context). */
-  fresh: boolean;
+  worldLabel: string;
+  position: number;
+  total: number;
   onRead: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
   onMuteSource: () => void;
   onSaveChange: (saved: boolean) => void;
 }) {
   const [saved, setSaved] = useState(story.saved);
+  const [tuning, setTuning] = useState(false);
   const [noted, setNoted] = useState<"more" | "less" | null>(null);
 
   const note = (kind: "more" | "less") => {
     sendSignal({ itemId: story.id, type: kind === "more" ? "more_like" : "less_like" });
     setNoted(kind);
-    setTimeout(() => setNoted(null), 1500);
   };
 
-  const style: React.CSSProperties = isMobile
-    ? { left: 12, right: 12, bottom: 14 }
-    : {
-        left: Math.min(Math.max(x + 26, 16), innerWidth - 396),
-        top: Math.min(Math.max(y - 60, 64), innerHeight - 260),
-        width: 380,
-      };
-
   return (
-    <div
-      className="fixed z-30 border backdrop-blur-md shadow-[0_28px_90px_rgba(0,0,0,0.55)] animate-[card-in_180ms_ease-out] pointer-events-auto"
-      style={{
-        ...style,
-        background: "linear-gradient(180deg, rgba(13,16,28,0.92), rgba(7,8,14,0.88))",
-        borderColor: `${accent}55`,
-        borderLeft: `3px solid ${accent}`,
-        padding: "16px 18px 14px",
-      }}
-    >
-      <div className="flex justify-between items-baseline font-mono text-[0.6rem] tracking-[0.2em] uppercase" style={{ color: accent }}>
-        <span className="truncate">{story.sourceName}</span>
-        <span className="shrink-0 ml-3" style={{ color: fresh ? "#ff6b4a" : "rgba(255,255,255,0.4)" }}>
-          {fresh ? "● " : ""}
-          {timeAgo(story.publishedAt)} ago
-        </span>
+    <aside className="story-briefing" style={{ "--briefing-accent": accent } as React.CSSProperties} aria-label="Current briefing story">
+      <div className="story-briefing__queue">
+        <span>{worldLabel}</span>
+        <span>{String(position + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</span>
       </div>
-      <h2 className="font-display font-extrabold text-[18px] leading-[1.16] tracking-[-0.02em] text-white mt-2">
-        {story.title}
-      </h2>
-      {story.excerpt ? (
-        <p className="mt-1.5 text-[12.5px] leading-[1.45] text-white/60 line-clamp-2">{story.excerpt}</p>
-      ) : null}
-      <div className="mt-2.5 font-mono text-[0.575rem] tracking-[0.14em] uppercase text-white/35">
-        {story.alsoCoveredBy.length > 0 ? <>also at {story.alsoCoveredBy.map((c) => c.sourceName).join(", ")} — </> : null}
-        {story.read ? "read" : "unread"}
-        {story.readingMinutes ? <> — {story.readingMinutes} min</> : null}
-        {story.exploration ? " — exploring" : ""}
+
+      <div className="story-briefing__source">
+        <span>{story.sourceName}</span>
+        <span>{timeAgo(story.publishedAt)} ago</span>
       </div>
-      {(() => {
-        const v = discussionVelocity(story);
-        const c = controversy(story);
-        if (v < 0.2 && c < 0.15) return null;
-        const bars = v >= 0.66 ? "▮▮▮" : v >= 0.33 ? "▮▮▯" : "▮▯▯";
-        return (
-          <div className="mt-1.5 font-mono text-[0.575rem] tracking-[0.14em] uppercase">
-            <span className="text-white/45">velocity {bars}</span>
-            {c >= 0.15 ? <span className="ml-3" style={{ color: "#e8a06a" }}>◈ contested</span> : null}
-          </div>
-        );
-      })()}
-      <div className="flex items-center gap-4 mt-3 pt-2.5 border-t font-mono text-[0.625rem] tracking-[0.16em] uppercase" style={{ borderColor: `${accent}22` }}>
+
+      <h2>{story.title}</h2>
+      {story.excerpt ? <p className="story-briefing__excerpt">{story.excerpt}</p> : null}
+
+      <div className="story-briefing__context">
+        <span>{story.read ? "Read" : "Unread"}</span>
+        {story.readingMinutes ? <span>{story.readingMinutes} min</span> : null}
+        {story.alsoCoveredBy.length ? <span>{story.alsoCoveredBy.length + 1} sources</span> : null}
+      </div>
+
+      <div className="story-briefing__actions">
         <button
           type="button"
+          className="story-briefing__save"
+          aria-pressed={saved}
           onClick={() => {
             sendSignal({ itemId: story.id, type: saved ? "unsave" : "save" });
             setSaved(!saved);
             onSaveChange(!saved);
           }}
-          className="cursor-pointer transition-colors"
-          style={{ color: saved ? "#ffd66b" : "rgba(255,255,255,0.55)" }}
         >
-          {saved ? "Saved ✓" : "Save"}
+          {saved ? "Saved" : "Save"}
         </button>
-        {noted ? (
-          <span style={{ color: accent }}>{noted === "more" ? "More ✓" : "Less ✓"}</span>
-        ) : (
-          <>
-            <button type="button" onClick={() => note("more")} className="cursor-pointer text-white/55 hover:text-white transition-colors">
-              More
-            </button>
-            <button type="button" onClick={() => note("less")} className="cursor-pointer text-white/55 hover:text-white transition-colors">
-              Less
-            </button>
-          </>
-        )}
-        <button type="button" onClick={onMuteSource} className="cursor-pointer text-white/55 hover:text-white transition-colors">
-          Mute src
-        </button>
-        <button
-          type="button"
-          onClick={onRead}
-          className="cursor-pointer ml-auto font-medium px-3.5 py-1.5 text-black transition-opacity hover:opacity-90"
-          style={{ background: accent }}
-        >
-          Read →
+        <button type="button" className="story-briefing__read" onClick={onRead}>
+          Read story
+          <span aria-hidden>→</span>
         </button>
       </div>
-    </div>
+
+      <div className="story-briefing__footer">
+        <div className="story-briefing__steps" aria-label="Browse stories">
+          <button type="button" onClick={onPrevious} aria-label="Previous story" title="Previous story">←</button>
+          <button type="button" onClick={onNext} aria-label="Next story" title="Next story">→</button>
+        </div>
+        <button
+          type="button"
+          className="story-briefing__tune"
+          onClick={() => setTuning((open) => !open)}
+          aria-expanded={tuning}
+        >
+          Tune feed <span aria-hidden>{tuning ? "−" : "+"}</span>
+        </button>
+      </div>
+
+      {tuning ? (
+        <div className="story-briefing__tuning">
+          {noted ? (
+            <span>{noted === "more" ? "More stories like this" : "Fewer stories like this"}</span>
+          ) : (
+            <>
+              <button type="button" onClick={() => note("more")}>More like this</button>
+              <button type="button" onClick={() => note("less")}>Less like this</button>
+              <button type="button" onClick={onMuteSource}>Mute {story.sourceName}</button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </aside>
   );
 }

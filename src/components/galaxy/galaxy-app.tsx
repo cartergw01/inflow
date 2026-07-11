@@ -6,8 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CameraState, GalaxyEngine, GalaxyPayload, GalaxyStory, HudLabel } from "../../galaxy/engine";
 import { WORLD_VISUALS, VISUALS_BY_SLUG } from "../../galaxy/worlds";
 import { queueSignal, sendSignal } from "../../lib/signals-client";
-import { timeAgo } from "../../lib/format";
-import { FocusCard } from "./focus-card";
+import { StoryBriefing } from "./focus-card";
 import type { ReaderPayload } from "./reader-overlay";
 import type { WarpTarget } from "./warp-bar";
 import { WorldSwitcher } from "./world-switcher";
@@ -19,9 +18,6 @@ const WarpBar = dynamic(() => import("./warp-bar").then((mod) => mod.WarpBar));
 interface FocusState {
   story: GalaxyStory;
   world: string;
-  x: number;
-  y: number;
-  fresh: boolean;
 }
 
 /**
@@ -95,13 +91,13 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
           canvasRef.current,
           payload,
           {
-            onFocus: (story, world, x, y) => {
+            onFocus: (story, world) => {
               if (!story || !world) {
                 setFocus(null);
                 if (impressionTimer.current) clearTimeout(impressionTimer.current);
                 return;
               }
-              setFocus({ story, world, x, y, fresh: Date.now() - new Date(story.publishedAt).getTime() < 3600_000 });
+              setFocus({ story, world });
               // A deliberate focus held ≥1s = the spatial impression.
               if (!impressed.current.has(story.id)) {
                 if (impressionTimer.current) clearTimeout(impressionTimer.current);
@@ -238,7 +234,15 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
 
   const worldData = view ? (view === "today" ? data?.today : data?.worlds.find((w) => w.slug === view)) : null;
   const accent = view ? (VISUALS_BY_SLUG.get(view)?.css ?? "#8ba2ff") : "#8ba2ff";
-  const totalStories = data ? data.worlds.reduce((a, w) => a + w.entries.length, 0) + data.today.entries.length : 0;
+  const activeStory = focus?.world === view ? focus.story : worldData?.entries[0] ?? null;
+  const activeStoryIndex = activeStory && worldData
+    ? Math.max(0, worldData.entries.findIndex((story) => story.id === activeStory.id))
+    : 0;
+  const stepStory = (direction: -1 | 1) => {
+    if (!worldData?.entries.length) return;
+    const next = (activeStoryIndex + direction + worldData.entries.length) % worldData.entries.length;
+    engineRef.current?.focusStory(worldData.entries[next].id);
+  };
 
   return (
     <div className="observatory-shell fixed inset-0 bg-[#04040a] text-white overflow-hidden">
@@ -314,30 +318,15 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
             )}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={openWarp}
-          className="pointer-events-auto cursor-pointer hidden md:flex items-center gap-2.5 border border-[#2a2f42] bg-[#080a12]/[0.76] px-4 py-2 w-[300px] backdrop-blur-md shadow-[0_16px_52px_rgba(0,0,0,0.32)] hover:border-[#56607e] hover:bg-[#101421]/[0.82] transition-colors"
-          aria-label="Warp search"
-        >
-          <span className="text-[#565d78] text-[11px]" aria-hidden>⌕</span>
-          <span className="font-mono text-[9.5px] tracking-[0.14em] text-[#454b62] uppercase">Warp to a galaxy or story…</span>
-          <span className="ml-auto font-mono text-[9px] text-[#565d78] border border-[#2a2f42] px-1.5">/</span>
-        </button>
-        <div className="flex items-center gap-4 font-mono text-[0.6rem] tracking-[0.16em] uppercase text-white/35 pointer-events-auto">
+        <div className="flex items-center gap-3 font-mono text-[0.6rem] tracking-[0.16em] uppercase text-white/35 pointer-events-auto">
           <button
             type="button"
             onClick={openWarp}
-            className="md:hidden cursor-pointer text-white/70 text-[13px] px-1"
+            className="cursor-pointer text-white/70 hover:text-white border border-white/15 bg-black/30 px-2.5 py-1.5 transition-colors"
             aria-label="Warp search"
           >
-            ⌕
+            <span aria-hidden>⌕</span><span className="hidden sm:inline ml-2">Search</span>
           </button>
-          <span className="hidden sm:inline">
-            {view && worldData
-              ? `${worldData.entries.length} stories · ranked for you`
-              : `${totalStories} stories${data?.updatedAt ? ` · synced ${timeAgo(data.updatedAt)} ago` : ""}`}
-          </span>
           <Link href="/saved" className="hidden sm:inline text-white/55 hover:text-white transition-colors">
             Saved
           </Link>
@@ -348,7 +337,7 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
       </div>
 
       {/* bottom HUD */}
-      <div className="observatory-bottom-hud absolute bottom-0 left-0 right-0 flex justify-center px-3 sm:px-5 pointer-events-none" data-obscured={Boolean(focus)}>
+      <div className="observatory-bottom-hud absolute bottom-0 left-0 right-0 flex justify-center px-3 sm:px-5 pointer-events-none">
         <WorldSwitcher
           activeWorld={view}
           onOverview={() => engineRef.current?.exitToGalaxy()}
@@ -357,18 +346,20 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
         />
       </div>
 
-      {/* focus card */}
-      {focus && !reading && !diving ? (
-        <FocusCard
-          story={focus.story}
-          accent={VISUALS_BY_SLUG.get(focus.world)?.css ?? accent}
-          x={focus.x}
-          y={focus.y}
-          isMobile={isMobile}
-          fresh={focus.fresh}
-          onRead={() => openReader(focus.story)}
-          onMuteSource={() => muteSource(focus.story)}
-          onSaveChange={(s) => engineRef.current?.setSaved(focus.story.id, s)}
+      {/* ranked briefing */}
+      {activeStory && worldData && !reading && !diving ? (
+        <StoryBriefing
+          key={activeStory.id}
+          story={activeStory}
+          accent={accent}
+          worldLabel={worldData.label}
+          position={activeStoryIndex}
+          total={worldData.entries.length}
+          onRead={() => openReader(activeStory)}
+          onPrevious={() => stepStory(-1)}
+          onNext={() => stepStory(1)}
+          onMuteSource={() => muteSource(activeStory)}
+          onSaveChange={(s) => engineRef.current?.setSaved(activeStory.id, s)}
         />
       ) : null}
 
@@ -377,7 +368,7 @@ export function GalaxyApp({ initialWorld }: { initialWorld: string | null }) {
         className="absolute inset-0 pointer-events-none transition-opacity duration-500"
         style={{
           opacity: diving ? 1 : 0,
-          background: `radial-gradient(circle at 50% 50%, ${accent}cc 0%, ${accent}55 35%, transparent 75%)`,
+          background: `rgba(4, 5, 9, 0.82)`,
         }}
         aria-hidden
       />

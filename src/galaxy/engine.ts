@@ -91,7 +91,7 @@ const TMP = new THREE.Vector3();
 const WHITE = new THREE.Color(0xffffff);
 const EMBER = new THREE.Color(0x272a34);
 const TAU = Math.PI * 2;
-const GALAXY_BACKDROP_URL = "/images/inflow-galaxy-background-v2.webp";
+const GALAXY_BACKDROP_URL = "/images/inflow-galaxy-background-v4.webp";
 const CORE_TEXTURE_ATLAS_URL = "/images/inflow-celestial-core-atlas-v2.webp";
 
 type CoreTextureKey = WorldVisual["core"];
@@ -966,34 +966,6 @@ export class GalaxyEngine {
           y: p.y,
           opacity: 0.95,
           storyId: ref.bridge.storyId,
-        });
-      }
-    } else {
-      const entries = this.byWorldIndex.get(this.view) ?? [];
-      const group = this.worldGroups.get(this.view)!;
-      const camDist = this.camera.position.distanceTo(group.position);
-      const maxN = camDist < 26 ? (this.isMobile ? 7 : 12) : 0;
-      const placed: { x: number; y: number }[] = [];
-      const W = 250;
-      const H = 40;
-      const edge = this.isMobile ? 96 : 130;
-      for (let i = 0; i < entries.length && labels.length < maxN; i++) {
-        const story = entries[i];
-        if (story.id === this.focusedId) continue;
-        const ref = this.stories.get(story.id)!;
-        const p = project(group.localToWorld(ref.local.clone()).add(TMP.set(0, this.storySize(i) * 3 + 0.35, 0)));
-        if (!p) continue;
-        if (p.x < edge || p.x > innerWidth - edge || p.y < 70 || p.y > innerHeight - 90) continue;
-        if (placed.some((q) => Math.abs(q.x - p.x) < W && Math.abs(q.y - p.y) < H)) continue;
-        placed.push(p);
-        labels.push({
-          key: `s-${story.id}`,
-          kind: "story",
-          text: story.title.length > 54 ? `${story.title.slice(0, 54).trimEnd()}…` : story.title,
-          color: story.read ? "#71747f" : "#f2f3f8",
-          x: p.x,
-          y: p.y,
-          opacity: story.read ? 0.5 : 0.9,
         });
       }
     }

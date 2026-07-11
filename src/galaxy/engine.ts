@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { VISUALS_BY_SLUG, activityScale, seeded, worldPosition, type WorldVisual } from "./worlds";
+import { WORLD_VISUALS, VISUALS_BY_SLUG, activityScale, seeded, worldPosition, type WorldVisual } from "./worlds";
 import { computeBridges, controversy, discussionVelocity, type Bridge } from "./metrics";
 
 /**
@@ -206,9 +206,11 @@ export class GalaxyEngine {
 
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
+  private pointerStart = new THREE.Vector2();
   private dragging = false;
   private moved = false;
   private lastPinch = 0;
+  private paused = false;
 
   private clock = new THREE.Clock();
   private frame = 0;
@@ -460,30 +462,37 @@ export class GalaxyEngine {
 
   private bindInput(el: HTMLCanvasElement) {
     el.addEventListener("pointerdown", (e) => {
+      if (this.paused) return;
       this.dragging = true;
       this.moved = false;
       this.pointer.set(e.clientX, e.clientY);
+      this.pointerStart.copy(this.pointer);
     });
     el.addEventListener("pointermove", (e) => {
-      if (!this.dragging) return;
+      if (!this.dragging || this.paused) return;
       const dx = e.clientX - this.pointer.x;
       const dy = e.clientY - this.pointer.y;
       if (Math.abs(dx) + Math.abs(dy) > 4) this.moved = true;
       this.pointer.set(e.clientX, e.clientY);
       if (this.anim) return;
-      this.theta -= dx * 0.005;
+      if (this.view === null) this.theta -= dx * 0.005;
       this.phi = Math.min(2.6, Math.max(0.35, this.phi - dy * 0.004));
     });
     el.addEventListener("pointerup", (e) => {
+      if (this.paused) return;
       this.dragging = false;
-      if (!this.moved) this.tap(e.clientX, e.clientY);
+      const dx = e.clientX - this.pointerStart.x;
+      const dy = e.clientY - this.pointerStart.y;
+      if (this.view && this.focusedId === null && Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+        this.stepWorld(dx < 0 ? 1 : -1);
+      } else if (!this.moved) this.tap(e.clientX, e.clientY);
     });
     el.addEventListener("pointerleave", () => (this.dragging = false));
     el.addEventListener(
       "wheel",
       (e) => {
         e.preventDefault();
-        if (this.anim) return;
+        if (this.anim || this.paused) return;
         this.radius = this.clampRadius(this.radius * (1 + Math.sign(e.deltaY) * 0.08));
       },
       { passive: false },
@@ -491,6 +500,7 @@ export class GalaxyEngine {
     el.addEventListener(
       "touchmove",
       (e) => {
+        if (this.paused) return;
         if (e.touches.length === 2) {
           e.preventDefault();
           const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
@@ -518,7 +528,7 @@ export class GalaxyEngine {
         false,
       );
       if (bridgeHits.length > 0) {
-        this.focusStory(bridgeHits[0].object.userData.bridgeStory as number);
+        this.warpToStory(bridgeHits[0].object.userData.bridgeStory as number);
         return;
       }
       const hits = this.raycaster.intersectObjects(this.hitTargets, false);
@@ -540,6 +550,12 @@ export class GalaxyEngine {
         return;
       }
     }
+    const worldHits = this.raycaster.intersectObjects(this.hitTargets, false);
+    const foreign = worldHits.find((hit) => hit.object.userData.world !== this.view);
+    if (foreign) {
+      this.enterWorld(foreign.object.userData.world as string);
+      return;
+    }
     this.clearFocus();
   }
 
@@ -556,6 +572,25 @@ export class GalaxyEngine {
       { target: group.position.clone(), theta: this.theta + 0.7, phi: 1.25, radius: (this.isMobile ? 19 : 14) * Math.max(scale, 0.8) },
       fast ? 450 : 1400,
     );
+  }
+
+  stepWorld(direction: -1 | 1) {
+    if (this.paused || this.focusedId !== null) return;
+    const current = WORLD_VISUALS.findIndex((world) => world.slug === this.view);
+    const next = current < 0
+      ? direction > 0 ? 0 : WORLD_VISUALS.length - 1
+      : (current + direction + WORLD_VISUALS.length) % WORLD_VISUALS.length;
+    this.enterWorld(WORLD_VISUALS[next].slug);
+  }
+
+  rotateOverview(direction: -1 | 1) {
+    if (this.paused || this.view !== null) return;
+    this.flyTo({ target: this.target.clone(), theta: this.theta + direction * 0.48, phi: this.phi, radius: this.radius }, 420);
+  }
+
+  setPaused(paused: boolean) {
+    this.paused = paused;
+    this.dragging = false;
   }
 
   exitToGalaxy() {
@@ -576,6 +611,8 @@ export class GalaxyEngine {
     const s = this.storySize(ref.index) * 2.4;
     this.focusRing.scale.setScalar(s);
     this.focusRing.position.copy(wp);
+    const framingRadius = (this.isMobile ? 11 : 9) * Math.max(this.worldScales.get(ref.world) ?? 1, 0.8);
+    this.flyTo({ target: wp, theta: this.theta, phi: this.phi, radius: framingRadius }, 520);
 
     // hover tier: satellites orbit at discussion velocity; instability = controversy
     const velocity = discussionVelocity(ref.story);
@@ -600,10 +637,12 @@ export class GalaxyEngine {
   }
 
   clearFocus() {
+    const hadFocus = this.focusedId !== null;
     this.focusedId = null;
     (this.focusRing.material as THREE.MeshBasicMaterial).opacity = 0;
     this.disposeFocusSystem();
     this.cb.onFocus(null, null, 0, 0);
+    if (hadFocus && this.view) this.pullBackFromStory();
   }
 
   private disposeFocusSystem() {
@@ -748,56 +787,11 @@ export class GalaxyEngine {
           key: `w-${slug}`,
           kind: "world",
           text: visual.label.toUpperCase(),
-          sub: slug === "today" ? "YOUR BRIEFING" : data.breaking ? "◉ BREAKING" : `${data.entries.length} STORIES`,
+          sub: data.breaking ? "● BREAKING" : undefined,
           color: visual.css,
           x: p.x,
           y: p.y,
           opacity: 1,
-        });
-      }
-      // top bridges get ambient labels; the rest reveal on tap
-      for (const ref of this.bridges.filter((b) => b.prominent)) {
-        const p = project(ref.mid.clone());
-        if (!p) continue;
-        const t = ref.bridge.title;
-        labels.push({
-          key: `b-${ref.bridge.storyId}`,
-          kind: "bridge",
-          text: t.length > 44 ? `${t.slice(0, 44).trimEnd()}…` : t,
-          sub: `${ref.bridge.a.toUpperCase()} × ${ref.bridge.b.toUpperCase()}`,
-          color: "#aac8de",
-          x: p.x,
-          y: p.y,
-          opacity: 0.95,
-          storyId: ref.bridge.storyId,
-        });
-      }
-    } else {
-      const entries = this.byWorldIndex.get(this.view) ?? [];
-      const group = this.worldGroups.get(this.view)!;
-      const camDist = this.camera.position.distanceTo(group.position);
-      const maxN = camDist < 26 ? (this.isMobile ? 7 : 12) : 0;
-      const placed: { x: number; y: number }[] = [];
-      const W = 250;
-      const H = 40;
-      const edge = this.isMobile ? 96 : 130;
-      for (let i = 0; i < entries.length && labels.length < maxN; i++) {
-        const story = entries[i];
-        if (story.id === this.focusedId) continue;
-        const ref = this.stories.get(story.id)!;
-        const p = project(group.localToWorld(ref.local.clone()).add(TMP.set(0, this.storySize(i) * 3 + 0.35, 0)));
-        if (!p) continue;
-        if (p.x < edge || p.x > innerWidth - edge || p.y < 70 || p.y > innerHeight - 90) continue;
-        if (placed.some((q) => Math.abs(q.x - p.x) < W && Math.abs(q.y - p.y) < H)) continue;
-        placed.push(p);
-        labels.push({
-          key: `s-${story.id}`,
-          kind: "story",
-          text: story.title.length > 54 ? `${story.title.slice(0, 54).trimEnd()}…` : story.title,
-          color: story.read ? "#71747f" : "#f2f3f8",
-          x: p.x,
-          y: p.y,
-          opacity: story.read ? 0.5 : 0.9,
         });
       }
     }
@@ -812,6 +806,10 @@ export class GalaxyEngine {
     const dt = this.clock.getDelta();
     const t = this.clock.elapsedTime;
     this.frame++;
+    if (this.paused) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
 
     if (this.anim) {
       const k = Math.min(1, (performance.now() - this.anim.t0) / this.anim.dur);

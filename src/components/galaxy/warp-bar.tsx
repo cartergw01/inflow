@@ -58,12 +58,17 @@ export function WarpBar({
   };
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[3px] flex justify-center pt-[12vh] px-4" onClick={onClose}>
-      <div
-        className="w-full max-w-[520px] h-fit bg-[#080a12]/95 border border-[#2a2f42] animate-[card-in_140ms_ease-out]"
+    <div className="galaxy-drawer-scrim" onClick={onClose}>
+      <aside
+        className="galaxy-drawer search-drawer"
         onClick={(e) => e.stopPropagation()}
+        aria-label="Search"
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2a2f42]">
+        <header className="galaxy-drawer__header">
+          <div><span className="galaxy-drawer__eyebrow">Find your next signal</span><h2>Search</h2></div>
+          <button type="button" onClick={onClose} aria-label="Close search" title="Close search">×</button>
+        </header>
+        <div className="search-drawer__input">
           <span className="text-[#565d78] text-sm" aria-hidden>
             ⌕
           </span>
@@ -81,22 +86,19 @@ export function WarpBar({
               if (e.key === "Enter") go(results[cursor]);
               e.stopPropagation();
             }}
-            placeholder="Warp to a galaxy or story…"
-            className="flex-1 bg-transparent outline-none text-white font-mono text-[13px] placeholder:text-[#454b62] placeholder:tracking-[0.1em]"
+            placeholder="Search worlds and stories…"
+            className="flex-1 bg-transparent outline-none text-white font-mono text-[13px] placeholder:text-[#596073]"
             aria-label="Warp search"
           />
-          <span className="font-mono text-[9px] text-[#565d78] border border-[#2a2f42] px-1.5 py-0.5">ESC</span>
         </div>
-        <ul className="max-h-[46vh] overflow-y-auto">
+        <ul className="search-drawer__results">
           {results.map((r, i) => (
             <li key={`${r.kind}-${r.id}`}>
               <button
                 type="button"
                 onClick={() => go(r)}
                 onMouseEnter={() => setCursor(i)}
-                className={`w-full text-left px-4 py-2.5 flex items-baseline gap-3 cursor-pointer ${
-                  i === cursor ? "bg-white/[0.07]" : ""
-                }`}
+                className={i === cursor ? "is-active" : ""}
               >
                 <span className="w-2 h-2 shrink-0 self-center" style={{ background: r.color }} aria-hidden />
                 <span className="min-w-0 flex-1">
@@ -106,11 +108,9 @@ export function WarpBar({
               </button>
             </li>
           ))}
-          {results.length === 0 ? (
-            <li className="px-4 py-4 font-mono text-[10px] tracking-[0.16em] text-[#454b62] uppercase">No matches in this sky</li>
-          ) : null}
+          {results.length === 0 ? <li className="galaxy-drawer__state">No matches in this sky.</li> : null}
         </ul>
-      </div>
+      </aside>
     </div>
   );
 }

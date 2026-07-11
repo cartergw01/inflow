@@ -15,6 +15,15 @@ function storyContext(story: GalaxyStory, worldLabel: string) {
   return story.readingMinutes ? `${story.readingMinutes} minute read.` : `Recommended in ${worldLabel}.`;
 }
 
+function verificationLabel(story: GalaxyStory): string {
+  if (story.status === "retracted") return "Retracted at source";
+  if (story.status === "corrected") return "Corrected at source";
+  if (story.status === "updated") return "Updated at source";
+  if (story.verificationStatus === "unconfirmed") return "Unconfirmed · single-source social report";
+  if (story.verificationStatus === "corroborated") return `Corroborated by ${story.alsoCoveredBy.length + 1} sources`;
+  return `Reported by ${story.sourceName}`;
+}
+
 export function StoryFocus({ story, accent, worldLabel, onRead, onDismiss, onMuteSource, onSaveChange }: {
   story: GalaxyStory;
   accent: string;
@@ -35,9 +44,18 @@ export function StoryFocus({ story, accent, worldLabel, onRead, onDismiss, onMut
   return (
     <aside className="story-focus" style={{ "--focus-accent": accent } as React.CSSProperties} aria-label="Selected story">
       <button type="button" className="story-focus__close" onClick={onDismiss} aria-label="Dismiss story" title="Dismiss story">×</button>
-      <div className="story-focus__meta"><span>{worldLabel}</span><span>{story.sourceName} · {timeAgo(story.publishedAt)} ago</span></div>
+      <div className="story-focus__meta">
+        <span className="story-focus__source">{story.sourceName}</span>
+        <span>{story.credibilityTier} source</span>
+        <span>{timeAgo(story.publishedAt)} ago</span>
+        {story.sourceCheckedAt ? <span>feed checked {timeAgo(story.sourceCheckedAt)} ago</span> : null}
+      </div>
       <h2>{story.title}</h2>
       <p>{storyContext(story, worldLabel)}</p>
+      <div className="story-focus__verification" data-verification={story.verificationStatus} data-status={story.status}>
+        {verificationLabel(story)}
+        {story.author ? <span> · {story.author}</span> : null}
+      </div>
       <div className="story-focus__actions">
         <button type="button" className="story-focus__save" aria-pressed={saved} onClick={() => {
           sendSignal({ itemId: story.id, type: saved ? "unsave" : "save" });

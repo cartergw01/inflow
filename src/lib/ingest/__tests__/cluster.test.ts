@@ -45,4 +45,12 @@ describe("findClusterMatch", () => {
     const match = findClusterMatch({ title: "Completely unrelated story about gardening", sourceId: 12 }, recent);
     expect(match).toBeNull();
   });
+
+  it("matches an exact canonical article shared with very different social text", () => {
+    const match = findClusterMatch(
+      { title: "Breaking — read this now", sourceId: 12, canonicalUrl: "https://reuters.com/world/story" },
+      [{ id: 3, title: "Leaders reach a regional agreement after overnight talks", sourceId: 13, clusterId: null, canonicalUrl: "https://reuters.com/world/story" }],
+    );
+    expect(match?.id).toBe(3);
+  });
 });

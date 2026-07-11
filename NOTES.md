@@ -2,9 +2,25 @@
 
 Decision log for InFlow. One entry per lesson/decision, one-line summary at the top of each.
 
-## X/Twitter deferred behind an env flag; HN + Bluesky carry real-time signal in v1
+## Credible source tiers, source families, and per-source cadence (2026-07-11)
 
-X API is now pay-per-usage (~$0.005/post read, verified 2026-07-02 at docs.x.com). A useful polling volume for one user's follows runs ~$30–75/mo and requires an X developer account + payment method only the owner can provide. Scraping violates X ToS — ruled out under "accuracy first / within terms." Decision: the X adapter ships in the codebase behind `X_API_KEY`; until it's set, real-time social signal comes from two free, ToS-clean sources: the Hacker News API (tech/VC discourse) and Bluesky's public AppView API (`public.api.bsky.app`, no auth) with a curated account list covering NBA, news, and tech figures. Cost of the tradeoff: no true X discourse in v1; benefit: $0, no ToS risk, live real-time signal from day one.
+The source registry now records a credibility tier, editorial family, polling interval, and whether a named author is required. Official Bloomberg, WSJ, and CNBC feeds are first-class major sources; Reuters remains represented through its official social account and original Reuters links because reusable full-text Reuters feeds require licensing. Major and curated social sources are eligible every 5 minutes, standard news every 10, and longform every 30. The five-minute GitHub Action is only a scheduler: each source enforces its own next-fetch time and conditional requests, so faster freshness does not mean refetching every feed every run. The UI exposes both publication time and last successful source check, and explicitly calls out delayed sources.
+
+## Official X recent search is bounded, allowlisted, and optional (updated 2026-07-11)
+
+Only X's official recent-search endpoint is used; scraping and algorithmic virality feeds remain rejected. Reads are constrained to a code/config allowlist, exclude replies and reposts, use a cursor, and cap returned posts per run with `X_MAX_POSTS_PER_RUN` (25 by default). The integration stays off without `X_BEARER_TOKEN`. X pricing is pay per use and can change, so operational policy is a hard $25 billing-cycle spending limit in the Developer Console rather than a cost estimate embedded in code. Until credentials are supplied, Hacker News and Bluesky continue to provide free, terms-compliant social signal.
+
+## Corroboration and corrections are source-family aware (2026-07-11)
+
+Significant social claims never become “corroborated” because two accounts repeated them. Corroboration counts independent editorial families, and a social-origin claim needs non-social outlet coverage; otherwise it is visibly labeled unconfirmed. Multiple channels from one newsroom count once. Exact canonical links cluster even when social and publisher headlines differ. Changed source content creates an item-version record; explicit corrections and retractions propagate status and notes into the focus card and reader rather than silently overwriting history.
+
+## Feed delivery is metadata-first and normalized (2026-07-11)
+
+The galaxy query no longer loads article HTML for hundreds of candidates. It fetches compact item metadata, signals, affinity, saves, mutes, and source health in one parallel wave; full sanitized content is fetched only when a reader opens or prefetches a story. Repeated stories across worlds travel once in a normalized `stories` dictionary. Word count is stored at ingestion for reading-time estimates. This removes the main warm-load and reader latency bottlenecks without weakening attribution or the reader experience.
+
+## Galaxy controls favor learned conventions over hidden novelty (2026-07-11)
+
+The spatial metaphor stays, but interaction is now tap/click to select, drag to pan in the camera plane, and wheel/pinch to zoom. Hover affordances, persistent labeled Search and Full galaxy controls, a source-freshness HUD, and a sub-10-second first-use hint make the controls discoverable. The hint never blocks the app and does not create an onboarding gate. Rejected: custom orbit/swipe navigation, hiding labels for visual minimalism, and forcing interest setup before the first useful screen. New-since-last-open is based on the profile's prior feed-open timestamp and appears as both world counts and a catch-up action.
 
 ## Substack ingestion via per-publication RSS — full content, free, within terms
 
@@ -107,8 +123,8 @@ Camera pose + current world persist to localStorage (every 4s and on pagehide); 
 
 ## Open questions
 
-- **X integration**: adapter is built and gated on `X_API_KEY`. Turning it on costs ~$30–75/mo at useful read volume and needs the owner's X developer account + payment method. Decide if true X discourse is worth it once the Bluesky/HN substitute has been lived with for a while.
+- **X integration**: the official recent-search adapter is built and gated on `X_BEARER_TOKEN`. Enabling it needs the owner's X developer account, credits, and a hard Developer Console spending limit; tune the allowlist and per-run cap only after observing real usage.
 - **Cluster threshold (0.5)** was tuned on one day of data; watch for false merges (two different stories collapsed) and revisit — a title-token approach may eventually want entity-aware matching.
 - **Exploration rate** is fixed at every 10th slot. If the feed still narrows over weeks of real use, make it adaptive (increase when click diversity drops).
 - **Multi-user**: anonymous cookie profiles work for a public app, but losing the cookie loses the profile. If anyone beyond the first user sticks, attach optional email/OAuth to the same profile row.
-- **Feed pagination**: v1 renders the top 80 ranked entries in one page. Fine at current volume; add cursor pagination if the candidate window grows.
+- **Feed pagination**: the galaxy ships a compact ranked working set in one response. Add cursor pagination if the candidate window or normalized payload grows beyond the documented performance budget.

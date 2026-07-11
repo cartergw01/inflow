@@ -8,11 +8,12 @@ type CustomItem = {
   "media:content"?: { $?: { url?: string } } | { $?: { url?: string } }[];
   creator?: string;
   enclosure?: { url?: string };
+  updated?: string;
 };
 
 const parser: Parser<Record<string, unknown>, CustomItem> = new Parser({
   customFields: {
-    item: ["content:encoded", ["media:content", "media:content", { keepArray: true }], "creator"],
+    item: ["content:encoded", ["media:content", "media:content", { keepArray: true }], "creator", "updated"],
   },
 });
 
@@ -35,6 +36,17 @@ export async function parseRssFeed(xml: string): Promise<RawItem[]> {
     const publishedAt = new Date(dateStr);
     if (Number.isNaN(publishedAt.getTime())) continue;
 
+    const updatedRaw = entry.updated ?? (entry as { updated?: string }).updated;
+    const updatedAt = updatedRaw ? new Date(updatedRaw) : null;
+    const statusText = `${title} ${entry.summary?.toString() ?? ""}`.toLowerCase();
+    const statusHint = /\bretract(?:ed|ion)\b/.test(statusText)
+      ? "retracted" as const
+      : /(?:^|\b)(?:correction|corrected)(?::|\b)/.test(statusText)
+        ? "corrected" as const
+        : /^(?:updated?|update):/i.test(title)
+          ? "updated" as const
+          : undefined;
+
     const contentHtml = entry["content:encoded"] ?? null;
     const mediaRaw = entry["media:content"];
     const media = Array.isArray(mediaRaw) ? mediaRaw[0] : mediaRaw;
@@ -50,6 +62,8 @@ export async function parseRssFeed(xml: string): Promise<RawItem[]> {
       contentHtml,
       imageUrl,
       publishedAt,
+      updatedAt: updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : null,
+      ...(statusHint ? { statusHint, correctionNote: title } : {}),
     });
   }
   return items;

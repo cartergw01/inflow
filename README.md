@@ -15,9 +15,9 @@ A personalized news feed that aggregates independent writers (Substack), real-ti
 ## How it works
 
 ```
-GitHub Actions cron (~10 min) ──▶ POST /api/ingest
+GitHub Actions cron (~5 min) ───▶ POST /api/ingest
                                      │
-               RSS/Substack · Hacker News · Bluesky adapters
+       RSS/Substack · Hacker News · Bluesky · official X adapters
                                      │
          normalize → dedupe (canonical URL) → classify → cluster
                                      │
@@ -29,9 +29,9 @@ GitHub Actions cron (~10 min) ──▶ POST /api/ingest
                                      └──▶ affinity updates (14-day half-life)
 ```
 
-- **Ingestion** ([src/lib/ingest](src/lib/ingest)) — ~35 curated sources across NBA, tech/VC, Taiwan, and US politics. Conditional GET, publisher-only excerpts, sanitized reader HTML, same-story clustering. X/Twitter ships as an adapter but stays off until `X_API_KEY` is set (pay-per-usage API; see [NOTES.md](NOTES.md)).
+- **Ingestion** ([src/lib/ingest](src/lib/ingest)) — named sources across NBA, tech/VC, Taiwan, US politics, markets, and world news. Major wires and social signals poll every 5 minutes, general news every 10, and longform every 30. Conditional GET, publisher-only excerpts, sanitized reader HTML, same-story clustering, correction history, and source-family-aware corroboration are built in. Official X recent search stays off until `X_BEARER_TOKEN` is set (pay per use; see [NOTES.md](NOTES.md)).
 - **Ranking** ([src/lib/ranking](src/lib/ranking)) — pure functions: signal→affinity updates with exponential decay, per-source-class recency half-lives (3h social / 24h news / 96h longform), cluster collapse, interleaving penalties, deterministic exploration slots.
-- **Interface** ([src/app](src/app), [src/components](src/components)) — an editorial "calm briefing": lead story, real-time ticker, per-class entry treatments, in-app reader for full-content items, anonymous cookie profiles (no login).
+- **Interface** ([src/app](src/app), [src/components](src/components)) — an explorable 3D briefing with conventional tap/select, drag/pan, wheel/pinch zoom, persistent search and full-galaxy controls, a catch-up view for stories new since the last open, and a calm in-app reader. Anonymous cookie profiles need no login or onboarding gate.
 
 ## Stack
 
@@ -47,10 +47,10 @@ npm run dev
 curl -X POST -H "x-ingest-secret: dev-secret" localhost:3000/api/ingest
 ```
 
-Open http://localhost:3000, pick interests, read. No Postgres install and no API keys needed — local dev runs on PGlite and free feeds.
+Open http://localhost:3000 and read. No Postgres install, account, onboarding gate, or API keys are needed — local dev runs on PGlite and free feeds.
 
 ```bash
-npm test                 # 72 tests: parsing (live-captured fixtures), classifier, clustering, ranking behavior
+npm test                 # parsing, source policy, credibility, clustering, ranking, and galaxy behavior
 npm run lint && npx tsc --noEmit
 ```
 

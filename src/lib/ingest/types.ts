@@ -1,10 +1,12 @@
-import type { NewItem, Source } from "../../db/schema";
+import type { ItemStatus, NewItem, Source } from "../../db/schema";
 
 /** A parsed-but-not-yet-normalized entry from any adapter. */
 export interface RawItem {
   guid: string;
   title: string;
   url: string;
+  /** Optional article URL used for cross-channel matching while `url` stays the original post/source. */
+  canonicalUrl?: string;
   author: string | null;
   /** Publisher-provided description/summary. Never generated. */
   excerpt: string | null;
@@ -12,6 +14,11 @@ export interface RawItem {
   contentHtml: string | null;
   imageUrl: string | null;
   publishedAt: Date;
+  /** Source-provided revision time when RSS/Atom exposes it. */
+  updatedAt?: Date | null;
+  /** Conservative explicit status parsed from source metadata or title. */
+  statusHint?: ItemStatus;
+  correctionNote?: string | null;
 }
 
 export interface FetchResult {
@@ -30,6 +37,7 @@ export interface IngestSourceStat {
   source: string;
   fetched: number;
   inserted: number;
+  updated: number;
   status: string;
 }
 
@@ -37,6 +45,7 @@ export interface IngestStats {
   sources: number;
   fetched: number;
   inserted: number;
+  updated: number;
   clustered: number;
   errors: string[];
   perSource: IngestSourceStat[];

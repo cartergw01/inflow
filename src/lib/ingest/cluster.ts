@@ -48,6 +48,7 @@ export interface Clusterable {
   title: string;
   sourceId: number;
   clusterId: number | null;
+  canonicalUrl?: string;
 }
 
 /**
@@ -56,14 +57,19 @@ export interface Clusterable {
  * by canonical-URL uniqueness; a source revisiting a story is an update).
  */
 export function findClusterMatch(
-  candidate: { title: string; sourceId: number },
+  candidate: { title: string; sourceId: number; canonicalUrl?: string },
   recent: Clusterable[],
 ): Clusterable | null {
   let best: Clusterable | null = null;
   let bestSim = CLUSTER_THRESHOLD;
   for (const other of recent) {
     if (other.sourceId === candidate.sourceId) continue;
-    const sim = titleSimilarity(candidate.title, other.title);
+    const exactCanonical = Boolean(
+      candidate.canonicalUrl &&
+      other.canonicalUrl &&
+      candidate.canonicalUrl === other.canonicalUrl,
+    );
+    const sim = exactCanonical ? 1 : titleSimilarity(candidate.title, other.title);
     if (sim >= bestSim) {
       bestSim = sim;
       best = other;

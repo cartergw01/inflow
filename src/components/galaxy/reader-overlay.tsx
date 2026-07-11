@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { fullDate, topicLabel } from "../../lib/format";
+import { fullDate, timeAgo, topicLabel } from "../../lib/format";
 import { sendSignal } from "../../lib/signals-client";
 
 export interface ReaderPayload {
@@ -9,7 +9,14 @@ export interface ReaderPayload {
   title: string;
   author: string | null;
   sourceName: string;
+  sourceHomepageUrl: string | null;
+  credibilityTier: "major" | "independent" | "social";
+  sourceCheckedAt: string | null;
   publishedAt: string;
+  updatedAt: string;
+  status: "active" | "updated" | "corrected" | "retracted";
+  verificationStatus: "reported" | "corroborated" | "unconfirmed";
+  correctionNote: string | null;
   topics: string[];
   contentHtml: string | null;
   excerpt: string | null;
@@ -27,10 +34,17 @@ export function ReaderOverlay({ item, accent, onClose, onSaveChange }: {
   const [noted, setNoted] = useState<"more" | "less" | null>(null);
   const [progress, setProgress] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
   const visibleMs = useRef(0);
   const visibleSince = useRef<number | null>(null);
 
   useEffect(() => {
+    backRef.current?.focus();
+    scrollRef.current?.querySelectorAll("img").forEach((image) => {
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.referrerPolicy = "no-referrer";
+    });
     visibleSince.current = document.visibilityState === "visible" ? Date.now() : null;
     const onVisibility = () => {
       if (document.visibilityState === "visible") visibleSince.current ??= Date.now();
@@ -71,11 +85,11 @@ export function ReaderOverlay({ item, accent, onClose, onSaveChange }: {
   };
 
   return (
-    <div ref={scrollRef} onScroll={updateProgress} className="reader-surface fixed inset-0 z-[60] overflow-y-auto animate-[reader-in_220ms_ease-out]">
+    <div ref={scrollRef} onScroll={updateProgress} className="reader-surface fixed inset-0 z-[60] overflow-y-auto animate-[reader-in_220ms_ease-out]" role="dialog" aria-modal="true" aria-labelledby={`reader-title-${item.id}`}>
       <div className="reader-progress" style={{ transform: `scaleX(${progress})`, background: accent }} aria-hidden />
       <div className="reader-toolbar sticky top-0 z-10">
         <div className="reader-toolbar__inner">
-          <button type="button" onClick={close} className="reader-toolbar__back">← Briefing</button>
+          <button ref={backRef} type="button" onClick={close} className="reader-toolbar__back">← Briefing</button>
           <span className="reader-toolbar__source">{item.sourceName}</span>
           <div className="reader-toolbar__actions">
             <button type="button" className="reader-toolbar__save cursor-pointer" data-saved={saved} onClick={() => {
@@ -89,10 +103,22 @@ export function ReaderOverlay({ item, accent, onClose, onSaveChange }: {
       </div>
 
       <article className="reader-article">
+        {item.status !== "active" || item.verificationStatus === "unconfirmed" ? (
+          <div className="reader-trust-banner" data-status={item.status} data-verification={item.verificationStatus}>
+            <strong>{item.status === "retracted" ? "Retracted" : item.status === "corrected" ? "Corrected" : item.status === "updated" ? "Updated" : "Unconfirmed"}</strong>
+            <span>{item.correctionNote ?? (item.verificationStatus === "unconfirmed" ? "This social-origin claim has not yet been corroborated by an established outlet." : "The source changed this story after publication.")}</span>
+          </div>
+        ) : null}
         <header className="reader-article__header">
           <div className="reader-article__topic" style={{ color: accent }}>{item.topics.map(topicLabel).join(" / ") || item.sourceName}</div>
-          <h1>{item.title}</h1>
-          <div className="reader-article__byline"><span>{item.sourceName}</span>{item.author ? <> — {item.author}</> : null} — {fullDate(item.publishedAt)}</div>
+          <h1 id={`reader-title-${item.id}`}>{item.title}</h1>
+          <div className="reader-article__byline">
+            {item.sourceHomepageUrl ? <a href={item.sourceHomepageUrl} target="_blank" rel="noopener noreferrer"><span>{item.sourceName}</span></a> : <span>{item.sourceName}</span>}
+            {item.author ? <> — {item.author}</> : null}
+            <> — {fullDate(item.publishedAt)} · {timeAgo(item.publishedAt)} ago</>
+            {item.sourceCheckedAt ? <> · feed checked {timeAgo(item.sourceCheckedAt)} ago</> : null}
+            <small>{item.verificationStatus === "corroborated" ? "Corroborated reporting" : item.verificationStatus === "unconfirmed" ? "Unconfirmed social report" : `${item.credibilityTier} source`}</small>
+          </div>
         </header>
         {item.contentHtml ? <div className="reader-body reader-body-system" dangerouslySetInnerHTML={{ __html: item.contentHtml }} /> : <div className="reader-article__fallback">
           {item.excerpt ? <p>{item.excerpt}</p> : null}

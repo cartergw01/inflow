@@ -1,10 +1,27 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { getDb, type Db } from "../../db";
-import { clusters, items, sources, type NewItem, type Source, type SourceKind } from "../../db/schema";
+import {
+  clusters,
+  items,
+  itemVersions,
+  sources,
+  type NewItem,
+  type Source,
+  type SourceKind,
+  type VerificationStatus,
+} from "../../db/schema";
 import { SOURCE_REGISTRY } from "./registry";
 import { classify } from "./classify";
-import { canonicalizeUrl, makeExcerpt, sanitizeContent, stripHtml } from "./normalize";
+import {
+  canonicalizeUrl,
+  countWords,
+  fingerprintContent,
+  makeExcerpt,
+  sanitizeContent,
+  stripHtml,
+} from "./normalize";
 import { clusterKey, findClusterMatch, type Clusterable } from "./cluster";
+import { verificationForGroup } from "./credibility";
 import { rssAdapter } from "./adapters/rss";
 import { hnAdapter } from "./adapters/hn";
 import { blueskyAdapter } from "./adapters/bluesky";
@@ -13,16 +30,12 @@ import type { IngestSourceStat, IngestStats, RawItem, SourceAdapter } from "./ty
 
 const ADAPTERS: Record<SourceKind, SourceAdapter> = {
   rss: rssAdapter,
-  substack: rssAdapter, // Substack is RSS with content:encoded full bodies
+  substack: rssAdapter,
   hn: hnAdapter,
   bluesky: blueskyAdapter,
   x: xAdapter,
 };
 
-/**
- * Backfill window per source class: enough history that a fresh deploy has a
- * feed, without resurrecting months-old news as "new".
- */
 const MAX_AGE_MS: Record<string, number> = {
   social: 48 * 3600_000,
   news: 7 * 24 * 3600_000,
@@ -30,41 +43,40 @@ const MAX_AGE_MS: Record<string, number> = {
 };
 
 const FETCH_CONCURRENCY = 6;
-/** How far back we look when matching a new item to an existing story cluster. */
 const CLUSTER_WINDOW_MS = 72 * 3600_000;
 
-/** Upserts the code-owned registry; DB keeps fetch state and `active` flags. */
+export function sourceIsDue(source: Pick<Source, "nextFetchAt">, now: Date, force = false): boolean {
+  return force || !source.nextFetchAt || source.nextFetchAt <= now;
+}
+
 async function syncRegistry(db: Db): Promise<void> {
   for (const entry of SOURCE_REGISTRY) {
     await db
       .insert(sources)
-      .values({
-        kind: entry.kind,
-        sourceClass: entry.sourceClass,
-        name: entry.name,
-        feedUrl: entry.feedUrl,
-        homepageUrl: entry.homepageUrl,
-        topicHints: entry.topicHints,
-        qualityPrior: entry.qualityPrior,
-      })
+      .values(entry)
       .onConflictDoUpdate({
         target: sources.feedUrl,
         set: {
-          name: entry.name,
+          kind: entry.kind,
           sourceClass: entry.sourceClass,
+          name: entry.name,
+          homepageUrl: entry.homepageUrl,
           topicHints: entry.topicHints,
           qualityPrior: entry.qualityPrior,
+          credibilityTier: entry.credibilityTier,
+          sourceFamily: entry.sourceFamily,
+          pollIntervalMinutes: entry.pollIntervalMinutes,
+          namedAuthorRequired: entry.namedAuthorRequired,
         },
       });
   }
 }
 
 function toNewItem(raw: RawItem, source: Source, now: Date): NewItem | null {
+  if (source.namedAuthorRequired && !raw.author?.trim()) return null;
   const maxAge = MAX_AGE_MS[source.sourceClass] ?? MAX_AGE_MS.news;
   if (now.getTime() - raw.publishedAt.getTime() > maxAge) return null;
-  // Feeds that date by local publication day (e.g. Taipei Times, UTC+8) can
-  // parse up to a day into the future; clamp those to now. Beyond that the
-  // feed is broken — drop rather than fabricate a timestamp.
+
   let publishedAt = raw.publishedAt;
   if (publishedAt.getTime() > now.getTime()) {
     if (publishedAt.getTime() > now.getTime() + 26 * 3600_000) return null;
@@ -73,55 +85,134 @@ function toNewItem(raw: RawItem, source: Source, now: Date): NewItem | null {
 
   const excerpt = makeExcerpt(raw.excerpt, raw.contentHtml);
   const contentHtml = raw.contentHtml ? sanitizeContent(raw.contentHtml) : null;
+  const title = stripHtml(raw.title);
+  const url = raw.url.trim();
+  const canonicalUrl = canonicalizeUrl(raw.canonicalUrl ?? url);
+  const status = raw.statusHint ?? "active";
+  const verificationStatus: VerificationStatus = source.credibilityTier === "social" ? "unconfirmed" : "reported";
+  const fingerprint = fingerprintContent([title, excerpt, contentHtml, canonicalUrl, status, raw.updatedAt?.toISOString()]);
+
   return {
     sourceId: source.id,
     guid: raw.guid,
-    author: raw.author,
-    // Some feeds (Yahoo) leave titles entity-encoded; stripHtml decodes.
-    title: stripHtml(raw.title),
-    url: raw.url,
-    canonicalUrl: canonicalizeUrl(raw.url),
+    author: raw.author?.trim() || null,
+    title,
+    url,
+    canonicalUrl,
     excerpt,
     contentHtml,
     imageUrl: raw.imageUrl,
     publishedAt,
+    sourceUpdatedAt: raw.updatedAt ?? null,
+    updatedAt: now,
+    firstSeenAt: now,
+    lastSeenAt: now,
+    contentFingerprint: fingerprint,
+    wordCount: countWords(contentHtml),
+    status,
+    verificationStatus,
+    correctionNote: raw.correctionNote ?? null,
     topics: classify(raw.title, excerpt, source.topicHints),
   };
 }
 
-/** Simple promise pool — avoids a dependency for one loop. */
-async function mapPool<T, R>(inputs: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+async function mapPool<T, R>(inputs: T[], limit: number, fn: (value: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(inputs.length);
   let next = 0;
   async function worker() {
     while (next < inputs.length) {
-      const i = next++;
-      results[i] = await fn(inputs[i]);
+      const index = next++;
+      results[index] = await fn(inputs[index]);
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, inputs.length) }, worker));
   return results;
 }
 
+async function upsertRows(db: Db, source: Source, rows: NewItem[], now: Date): Promise<{ inserted: number; updated: number }> {
+  if (rows.length === 0) return { inserted: 0, updated: 0 };
+  const guids = [...new Set(rows.map((row) => row.guid))];
+  const existing = await db
+    .select()
+    .from(items)
+    .where(and(eq(items.sourceId, source.id), inArray(items.guid, guids)));
+  const byGuid = new Map(existing.map((item) => [item.guid, item]));
+  const newRows = rows.filter((row) => !byGuid.has(row.guid));
+  let inserted = 0;
+
+  if (newRows.length > 0) {
+    const result = await db
+      .insert(items)
+      .values(newRows)
+      .onConflictDoNothing({ target: [items.sourceId, items.guid] })
+      .returning({ id: items.id });
+    inserted = result.length;
+  }
+
+  await db
+    .update(items)
+    .set({ lastSeenAt: now })
+    .where(and(eq(items.sourceId, source.id), inArray(items.guid, guids)));
+
+  const changed = rows.filter((row) => {
+    const previous = byGuid.get(row.guid);
+    return previous && previous.contentFingerprint !== row.contentFingerprint;
+  });
+
+  if (changed.length > 0) {
+    const versioned = changed.filter((row) => byGuid.get(row.guid)!.contentFingerprint !== "");
+    if (versioned.length > 0) await db.insert(itemVersions).values(versioned.map((row) => {
+      const previous = byGuid.get(row.guid)!;
+      return {
+        itemId: previous.id,
+        title: previous.title,
+        excerpt: previous.excerpt,
+        contentFingerprint: previous.contentFingerprint,
+        status: previous.status,
+        capturedAt: now,
+      };
+    }));
+
+    for (const row of changed) {
+      const previous = byGuid.get(row.guid)!;
+      const status = previous.contentFingerprint === "" ? row.status : row.status === "active" ? "updated" : row.status;
+      await db
+        .update(items)
+        .set({
+          author: row.author,
+          title: row.title,
+          url: row.url,
+          canonicalUrl: row.canonicalUrl,
+          excerpt: row.excerpt,
+          contentHtml: row.contentHtml,
+          imageUrl: row.imageUrl,
+          publishedAt: row.publishedAt,
+          sourceUpdatedAt: row.sourceUpdatedAt,
+          updatedAt: now,
+          lastSeenAt: now,
+          contentFingerprint: row.contentFingerprint,
+          wordCount: row.wordCount,
+          status,
+          correctionNote: row.correctionNote,
+          topics: row.topics,
+          clusterId: null,
+        })
+        .where(eq(items.id, previous.id));
+    }
+  }
+
+  return { inserted, updated: changed.length };
+}
+
 async function ingestSource(db: Db, source: Source, now: Date): Promise<IngestSourceStat> {
   const adapter = ADAPTERS[source.kind];
   try {
     const result = await adapter.fetch(source);
-    let inserted = 0;
-
-    if (!result.notModified) {
-      const rows = result.items
-        .map((raw) => toNewItem(raw, source, now))
-        .filter((r): r is NewItem => r !== null);
-      for (const row of rows) {
-        const res = await db
-          .insert(items)
-          .values(row)
-          .onConflictDoNothing({ target: items.canonicalUrl })
-          .returning({ id: items.id });
-        inserted += res.length;
-      }
-    }
+    const rows = result.notModified
+      ? []
+      : result.items.map((raw) => toNewItem(raw, source, now)).filter((row): row is NewItem => row !== null);
+    const counts = await upsertRows(db, source, rows, now);
+    const nextFetchAt = new Date(now.getTime() + source.pollIntervalMinutes * 60_000);
 
     await db
       .update(sources)
@@ -129,38 +220,47 @@ async function ingestSource(db: Db, source: Source, now: Date): Promise<IngestSo
         etag: result.etag,
         lastModified: result.lastModified,
         lastFetchedAt: now,
-        lastStatus: result.notModified ? "not-modified" : `ok:${inserted}`,
+        lastSuccessfulFetchAt: now,
+        nextFetchAt,
+        lastStatus: result.notModified ? "not-modified" : `ok:${counts.inserted}+${counts.updated}u`,
       })
       .where(eq(sources.id, source.id));
 
-    return { source: source.name, fetched: result.items.length, inserted, status: "ok" };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    return { source: source.name, fetched: result.items.length, inserted: counts.inserted, updated: counts.updated, status: "ok" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     await db
       .update(sources)
-      .set({ lastFetchedAt: now, lastStatus: `error: ${message.slice(0, 200)}` })
+      .set({
+        lastFetchedAt: now,
+        nextFetchAt: new Date(now.getTime() + Math.min(5, source.pollIntervalMinutes) * 60_000),
+        lastStatus: `error: ${message.slice(0, 200)}`,
+      })
       .where(eq(sources.id, source.id));
-    return { source: source.name, fetched: 0, inserted: 0, status: `error: ${message}` };
+    return { source: source.name, fetched: 0, inserted: 0, updated: 0, status: `error: ${message}` };
   }
 }
 
-/**
- * Groups new unclustered items into same-story clusters against the recent
- * window. Runs after inserts so clustering sees all of this batch too.
- */
-async function clusterRecentItems(db: Db, now: Date): Promise<number> {
+async function clusterAndVerifyRecent(db: Db, now: Date): Promise<number> {
   const windowStart = new Date(now.getTime() - CLUSTER_WINDOW_MS);
   const recent = await db
-    .select({ id: items.id, title: items.title, sourceId: items.sourceId, clusterId: items.clusterId })
+    .select({ item: items, source: sources })
     .from(items)
+    .innerJoin(sources, eq(items.sourceId, sources.id))
     .where(gte(items.publishedAt, windowStart));
 
-  const pool: Clusterable[] = recent.map((r) => ({ ...r }));
+  const pool: Clusterable[] = recent.map(({ item }) => ({
+    id: item.id,
+    title: item.title,
+    sourceId: item.sourceId,
+    clusterId: item.clusterId,
+    canonicalUrl: item.canonicalUrl,
+  }));
   let clustered = 0;
 
   for (const item of pool) {
     if (item.clusterId !== null) continue;
-    const match = findClusterMatch(item, pool.filter((p) => p.id !== item.id));
+    const match = findClusterMatch(item, pool.filter((candidate) => candidate.id !== item.id));
     if (!match) continue;
 
     let clusterId = match.clusterId;
@@ -178,38 +278,69 @@ async function clusterRecentItems(db: Db, now: Date): Promise<number> {
     item.clusterId = clusterId;
     clustered += 1;
   }
+
+  const refreshed = await db
+    .select({ item: items, source: sources })
+    .from(items)
+    .innerJoin(sources, eq(items.sourceId, sources.id))
+    .where(gte(items.publishedAt, windowStart));
+  const groups = new Map<number, typeof refreshed>();
+  for (const row of refreshed) {
+    if (row.item.clusterId === null) continue;
+    const group = groups.get(row.item.clusterId) ?? [];
+    group.push(row);
+    groups.set(row.item.clusterId, group);
+  }
+
+  const idsByVerification: Record<VerificationStatus, number[]> = {
+    reported: [],
+    corroborated: [],
+    unconfirmed: [],
+  };
+  for (const row of refreshed) {
+    const group = row.item.clusterId === null ? [row] : groups.get(row.item.clusterId) ?? [row];
+    const verification = verificationForGroup(row.source, group.map((entry) => entry.source));
+    idsByVerification[verification].push(row.item.id);
+  }
+  for (const [verification, ids] of Object.entries(idsByVerification) as Array<[VerificationStatus, number[]]>) {
+    if (ids.length > 0) await db.update(items).set({ verificationStatus: verification }).where(inArray(items.id, ids));
+  }
+
   return clustered;
 }
 
-export async function runIngest(): Promise<IngestStats> {
+export async function runIngest({ force = false }: { force?: boolean } = {}): Promise<IngestStats> {
   const started = Date.now();
   const now = new Date();
   const db = getDb();
 
   await syncRegistry(db);
   const activeSources = await db.select().from(sources).where(eq(sources.active, true));
-
-  const perSource = await mapPool(activeSources, FETCH_CONCURRENCY, (s) => ingestSource(db, s, now));
-  const clustered = await clusterRecentItems(db, now);
+  const dueSources = activeSources.filter((source) => sourceIsDue(source, now, force));
+  const perSource = await mapPool(dueSources, FETCH_CONCURRENCY, (source) => ingestSource(db, source, now));
+  const changed = perSource.some((source) => source.inserted > 0 || source.updated > 0);
+  const clustered = changed ? await clusterAndVerifyRecent(db, now) : 0;
 
   return {
-    sources: activeSources.length,
-    fetched: perSource.reduce((a, s) => a + s.fetched, 0),
-    inserted: perSource.reduce((a, s) => a + s.inserted, 0),
+    sources: dueSources.length,
+    fetched: perSource.reduce((total, source) => total + source.fetched, 0),
+    inserted: perSource.reduce((total, source) => total + source.inserted, 0),
+    updated: perSource.reduce((total, source) => total + source.updated, 0),
     clustered,
-    errors: perSource.filter((s) => s.status.startsWith("error")).map((s) => `${s.source}: ${s.status}`),
+    errors: perSource.filter((source) => source.status.startsWith("error")).map((source) => `${source.source}: ${source.status}`),
     perSource,
     ms: Date.now() - started,
   };
 }
 
-/** True when the newest successful fetch is older than the freshness window. */
-export async function isStale(maxAgeMinutes = 15): Promise<boolean> {
+/** True when any active source has missed two expected poll windows. */
+export async function isStale(minimumMinutes = 15): Promise<boolean> {
   const db = getDb();
-  const [row] = await db
-    .select({ latest: sql<string | null>`max(${sources.lastFetchedAt})` })
-    .from(sources)
-    .where(and(eq(sources.active, true)));
-  if (!row?.latest) return true;
-  return Date.now() - new Date(row.latest).getTime() > maxAgeMinutes * 60_000;
+  const activeSources = await db.select().from(sources).where(eq(sources.active, true));
+  const now = Date.now();
+  return activeSources.some((source) => {
+    if (!source.lastSuccessfulFetchAt) return true;
+    const allowance = Math.max(minimumMinutes, source.pollIntervalMinutes * 2) * 60_000;
+    return now - source.lastSuccessfulFetchAt.getTime() > allowance;
+  });
 }

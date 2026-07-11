@@ -1,7 +1,6 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { GalaxyApp } from "../../components/galaxy/galaxy-app";
 import { VISUALS_BY_SLUG } from "../../galaxy/worlds";
-import { getProfile } from "../../lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +22,6 @@ export default async function ObservatoryPage({ params }: { params: Promise<{ lo
     if (loc[0] !== "g" || loc.length !== 2 || !VISUALS_BY_SLUG.has(loc[1])) notFound();
     initialWorld = loc[1];
   }
-
-  const profile = await getProfile();
-  if (!profile) redirect("/welcome");
 
   return <GalaxyApp initialWorld={initialWorld} />;
 }

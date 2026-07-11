@@ -8,6 +8,13 @@
       "when": 1782996670285,
       "tag": "0000_nostalgic_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783773814530,
+      "tag": "0001_neat_triton",
+      "breakpoints": true
     }
   ]
 }

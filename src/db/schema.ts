@@ -19,6 +19,15 @@ export type SourceKind = "substack" | "rss" | "hn" | "bluesky" | "x";
 /** Editorial class of a source. Drives recency half-life and feed treatment. */
 export type SourceClass = "longform" | "news" | "social";
 
+/** Editorial trust tier. This is curated evidence, not an engagement score. */
+export type CredibilityTier = "major" | "independent" | "social";
+
+/** Source-visible lifecycle state for corrections and retractions. */
+export type ItemStatus = "active" | "updated" | "corrected" | "retracted";
+
+/** Whether a claim is source-reported, independently corroborated, or still unconfirmed. */
+export type VerificationStatus = "reported" | "corroborated" | "unconfirmed";
+
 export const sources = pgTable(
   "sources",
   {
@@ -33,11 +42,18 @@ export const sources = pgTable(
     topicHints: jsonb("topic_hints").$type<string[]>().notNull().default([]),
     /** Reputation prior in [0,1]; reputable wire services near 1. */
     qualityPrior: real("quality_prior").notNull().default(0.7),
+    credibilityTier: text("credibility_tier").$type<CredibilityTier>().notNull().default("independent"),
+    /** Distinct editorial origin used to avoid counting syndication as corroboration. */
+    sourceFamily: text("source_family").notNull().default("unknown"),
+    pollIntervalMinutes: integer("poll_interval_minutes").notNull().default(10),
+    namedAuthorRequired: boolean("named_author_required").notNull().default(false),
     active: boolean("active").notNull().default(true),
     // Conditional-GET state
     etag: text("etag"),
     lastModified: text("last_modified"),
     lastFetchedAt: timestamp("last_fetched_at", { withTimezone: true }),
+    lastSuccessfulFetchAt: timestamp("last_successful_fetch_at", { withTimezone: true }),
+    nextFetchAt: timestamp("next_fetch_at", { withTimezone: true }),
     lastStatus: text("last_status"),
   },
   (t) => [uniqueIndex("sources_feed_url_idx").on(t.feedUrl)],
@@ -71,20 +87,50 @@ export const items = pgTable(
     imageUrl: text("image_url"),
     publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    contentFingerprint: text("content_fingerprint").notNull().default(""),
+    wordCount: integer("word_count").notNull().default(0),
+    status: text("status").$type<ItemStatus>().notNull().default("active"),
+    verificationStatus: text("verification_status").$type<VerificationStatus>().notNull().default("reported"),
+    correctionNote: text("correction_note"),
     topics: jsonb("topics").$type<string[]>().notNull().default([]),
     clusterId: integer("cluster_id").references(() => clusters.id),
   },
   (t) => [
-    uniqueIndex("items_canonical_url_idx").on(t.canonicalUrl),
+    uniqueIndex("items_source_guid_idx").on(t.sourceId, t.guid),
+    index("items_canonical_url_idx").on(t.canonicalUrl),
     index("items_published_at_idx").on(t.publishedAt),
     index("items_source_id_idx").on(t.sourceId),
+    index("items_cluster_id_idx").on(t.clusterId),
   ],
+);
+
+/** Immutable snapshots created only when a source changes an existing item. */
+export const itemVersions = pgTable(
+  "item_versions",
+  {
+    id: serial("id").primaryKey(),
+    itemId: integer("item_id")
+      .notNull()
+      .references(() => items.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    excerpt: text("excerpt"),
+    contentFingerprint: text("content_fingerprint").notNull(),
+    status: text("status").$type<ItemStatus>().notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("item_versions_item_idx").on(t.itemId, t.capturedAt)],
 );
 
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey().defaultRandom(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Previous briefing-open boundary, used for honest "new since last visit" state. */
+    lastFeedOpenedAt: timestamp("last_feed_opened_at", { withTimezone: true }),
   /** Seed interests chosen at onboarding; ranking input, not a filter. */
   interests: jsonb("interests").$type<string[]>().notNull().default([]),
 });
@@ -169,6 +215,7 @@ export type Source = typeof sources.$inferSelect;
 export type NewSource = typeof sources.$inferInsert;
 export type Item = typeof items.$inferSelect;
 export type NewItem = typeof items.$inferInsert;
+export type ItemVersion = typeof itemVersions.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type Signal = typeof signals.$inferSelect;
 export type Affinity = typeof affinities.$inferSelect;

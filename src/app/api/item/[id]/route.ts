@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
-import { getDb } from "../../../../db";
-import { saves } from "../../../../db/schema";
-import { loadItem } from "../../../../lib/feed-data";
+import { loadReaderItem } from "../../../../lib/feed-data";
 import { stripHtml } from "../../../../lib/ingest/normalize";
-import { getProfile } from "../../../../lib/profile";
+import { getProfileId } from "../../../../lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -18,28 +15,24 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const itemId = Number(id);
   if (!Number.isInteger(itemId)) return NextResponse.json({ error: "bad id" }, { status: 400 });
 
-  const row = await loadItem(itemId);
+  const profileId = await getProfileId();
+  const row = await loadReaderItem(itemId, profileId);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const profile = await getProfile();
-  let saved = false;
-  if (profile) {
-    const db = getDb();
-    const rows = await db
-      .select({ itemId: saves.itemId })
-      .from(saves)
-      .where(and(eq(saves.profileId, profile.id), eq(saves.itemId, itemId)))
-      .limit(1);
-    saved = rows.length > 0;
-  }
-
-  const { item, source } = row;
+  const { item, source, saved } = row;
   return NextResponse.json({
     id: item.id,
     title: stripHtml(item.title),
     author: item.author,
     sourceName: source.name,
+    sourceHomepageUrl: source.homepageUrl,
+    credibilityTier: source.credibilityTier,
+    sourceCheckedAt: source.lastSuccessfulFetchAt?.toISOString() ?? null,
     publishedAt: item.publishedAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
+    status: item.status,
+    verificationStatus: item.verificationStatus,
+    correctionNote: item.correctionNote,
     topics: item.topics,
     contentHtml: item.contentHtml,
     excerpt: item.excerpt,

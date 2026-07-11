@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { parseRssFeed } from "../adapters/rss";
 import { parseHnStory, type HnStory } from "../adapters/hn";
 import { parseBlueskyFeed, stripUrls, type BlueskyFeedResponse } from "../adapters/bluesky";
+import { parseXResponse } from "../adapters/x";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "fixtures", name), "utf8");
 
@@ -30,6 +31,16 @@ describe("parseRssFeed — mainstream", () => {
     for (const item of items) expect(item.publishedAt.getTime()).not.toBeNaN();
   });
 
+  it("preserves source revision time and explicit correction state", async () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel><title>t</title><item>
+      <title>Correction: agency revises the reported total</title><link>https://outlet.test/story</link>
+      <guid>story-1</guid><pubDate>Wed, 01 Jul 2026 00:00:00 GMT</pubDate><updated>Wed, 01 Jul 2026 01:00:00 GMT</updated>
+    </item></channel></rss>`;
+    const [item] = await parseRssFeed(xml);
+    expect(item.statusHint).toBe("corrected");
+    expect(item.updatedAt?.toISOString()).toBe("2026-07-01T01:00:00.000Z");
+  });
+
   it("parses NPR politics entries", async () => {
     const items = await parseRssFeed(fixture("rss-npr-politics.xml"));
     expect(items.length).toBeGreaterThan(3);
@@ -49,6 +60,24 @@ describe("parseRssFeed — mainstream", () => {
     const items = await parseRssFeed(xml);
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("Good");
+  });
+});
+
+describe("parseXResponse", () => {
+  it("accepts only curated authors and keeps the post as origin plus article canonical URL", () => {
+    const [item] = parseXResponse({
+      data: [{
+        id: "123",
+        text: "A confirmed development https://t.co/x",
+        author_id: "u1",
+        created_at: "2026-07-01T00:00:00Z",
+        entities: { urls: [{ expanded_url: "https://reuters.com/world/development" }] },
+      }],
+      includes: { users: [{ id: "u1", name: "Reuters", username: "Reuters", verified: true }] },
+    });
+    expect(item.url).toBe("https://x.com/Reuters/status/123");
+    expect(item.canonicalUrl).toBe("https://reuters.com/world/development");
+    expect(item.author).toContain("verified");
   });
 });
 

@@ -74,11 +74,13 @@ export function parseBlueskyFeed(data: BlueskyFeedResponse, handle: string): Raw
       guid: post.uri,
       title,
       url,
+      ...(external?.uri ? { canonicalUrl: external.uri } : {}),
       author: post.author.displayName ?? post.author.handle,
       excerpt: external?.description?.trim() || null,
       contentHtml: `<p>${escapeHtml(text)}</p>${linkHtml}` || null,
       imageUrl: external?.thumb ?? null,
       publishedAt,
+      updatedAt: null,
     });
   }
   return items;

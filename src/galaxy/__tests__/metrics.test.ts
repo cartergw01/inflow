@@ -99,9 +99,8 @@ describe("computeBridges", () => {
   });
 
   it("ranks by prominence and caps the count", () => {
-    const mk = (id: number, rank0: boolean) =>
-      story({ id, topics: ["us-politics", "world"], title: `S${id}` });
-    const entries = [mk(1, true), mk(2, false), mk(3, false), mk(4, false), mk(5, false), mk(6, false)];
+    const mk = (id: number) => story({ id, topics: ["us-politics", "world"], title: `S${id}` });
+    const entries = [mk(1), mk(2), mk(3), mk(4), mk(5), mk(6)];
     const bridges = computeBridges([{ slug: "politics", entries }], 3);
     expect(bridges).toHaveLength(3);
     expect(bridges[0].storyId).toBe(1);

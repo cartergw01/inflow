@@ -57,6 +57,8 @@ describe("sanitizeContent", () => {
     expect(clean).not.toContain("javascript:");
     expect(clean).toContain('href="https://ok.com"');
     expect(clean).toContain('src="https://img.com/a.jpg"');
+    expect(clean).toContain('loading="lazy"');
+    expect(clean).toContain('decoding="async"');
   });
 
   it("forces external links to open safely", () => {

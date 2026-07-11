@@ -1,4 +1,4 @@
-import type { SourceClass, SourceKind } from "../../db/schema";
+import type { CredibilityTier, SourceClass, SourceKind } from "../../db/schema";
 
 export interface RegistryEntry {
   kind: SourceKind;
@@ -9,6 +9,59 @@ export interface RegistryEntry {
   homepageUrl: string;
   topicHints: string[];
   qualityPrior: number;
+  credibilityTier: CredibilityTier;
+  sourceFamily: string;
+  pollIntervalMinutes: number;
+  namedAuthorRequired: boolean;
+}
+
+type RegistrySeed = Omit<
+  RegistryEntry,
+  "credibilityTier" | "sourceFamily" | "pollIntervalMinutes" | "namedAuthorRequired"
+> & Partial<Pick<RegistryEntry, "credibilityTier" | "sourceFamily" | "pollIntervalMinutes" | "namedAuthorRequired">>;
+
+const MAJOR_OUTLETS = new Set([
+  "AP News", "BBC World", "Bloomberg Markets", "Bloomberg Technology", "CBS Sports NBA",
+  "CNBC", "ESPN", "ESPN NBA", "NPR Politics", "NYT Politics", "Politico", "Reuters",
+  "The New York Times", "WSJ Markets", "WSJ World", "Yahoo Sports NBA",
+]);
+
+const SOURCE_FAMILIES: Record<string, string> = {
+  "AP News": "ap",
+  "Bloomberg Markets": "bloomberg",
+  "Bloomberg Technology": "bloomberg",
+  ESPN: "espn",
+  "ESPN NBA": "espn",
+  "Marc Stein": "marc-stein",
+  "Marc Stein (Bluesky)": "marc-stein",
+  "NYT Politics": "nyt",
+  Reuters: "reuters",
+  "Silver Bulletin": "nate-silver",
+  "Nate Silver": "nate-silver",
+  "The New York Times": "nyt",
+  "WSJ Markets": "wsj",
+  "WSJ World": "wsj",
+};
+
+function defaultFamily(entry: RegistrySeed): string {
+  const explicit = SOURCE_FAMILIES[entry.name];
+  if (explicit) return explicit;
+  try {
+    return new URL(entry.homepageUrl).hostname.replace(/^www\./, "").split(".").slice(0, -1).join("-");
+  } catch {
+    return entry.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
+}
+
+function withPolicy(entry: RegistrySeed): RegistryEntry {
+  const tier = entry.credibilityTier ?? (MAJOR_OUTLETS.has(entry.name) ? "major" : entry.sourceClass === "social" ? "social" : "independent");
+  return {
+    ...entry,
+    credibilityTier: tier,
+    sourceFamily: entry.sourceFamily ?? defaultFamily(entry),
+    pollIntervalMinutes: entry.pollIntervalMinutes ?? (entry.sourceClass === "longform" ? 30 : tier === "major" || entry.sourceClass === "social" ? 5 : 10),
+    namedAuthorRequired: entry.namedAuthorRequired ?? (entry.sourceClass === "longform" || (entry.sourceClass === "social" && tier === "social")),
+  };
 }
 
 /**
@@ -16,7 +69,7 @@ export interface RegistryEntry {
  * added (2026-07-03). The registry is code-owned and synced into the `sources`
  * table on each ingest run; fetch state and `active` live only in the DB.
  */
-export const SOURCE_REGISTRY: RegistryEntry[] = [
+const SOURCE_SEEDS: RegistrySeed[] = [
   // ── NBA ──────────────────────────────────────────────────────────────
   { kind: "rss", sourceClass: "news", name: "ESPN NBA", feedUrl: "https://www.espn.com/espn/rss/nba/news", homepageUrl: "https://www.espn.com/nba/", topicHints: ["nba"], qualityPrior: 0.85 },
   { kind: "rss", sourceClass: "news", name: "Yahoo Sports NBA", feedUrl: "https://sports.yahoo.com/nba/rss/", homepageUrl: "https://sports.yahoo.com/nba/", topicHints: ["nba"], qualityPrior: 0.8 },
@@ -54,9 +107,15 @@ export const SOURCE_REGISTRY: RegistryEntry[] = [
   // ── World / general ──────────────────────────────────────────────────
   { kind: "rss", sourceClass: "news", name: "BBC World", feedUrl: "https://feeds.bbci.co.uk/news/world/rss.xml", homepageUrl: "https://www.bbc.com/news/world", topicHints: ["world"], qualityPrior: 0.85 },
   { kind: "rss", sourceClass: "news", name: "The New York Times", feedUrl: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", homepageUrl: "https://www.nytimes.com", topicHints: ["world", "us-politics"], qualityPrior: 0.9 },
+  { kind: "rss", sourceClass: "news", name: "Bloomberg Markets", feedUrl: "https://feeds.bloomberg.com/markets/news.rss", homepageUrl: "https://www.bloomberg.com/markets", topicHints: ["business", "world"], qualityPrior: 0.96 },
+  { kind: "rss", sourceClass: "news", name: "Bloomberg Technology", feedUrl: "https://feeds.bloomberg.com/technology/news.rss", homepageUrl: "https://www.bloomberg.com/technology", topicHints: ["tech", "business"], qualityPrior: 0.96 },
+  { kind: "rss", sourceClass: "news", name: "WSJ World", feedUrl: "https://feeds.content.dowjones.io/public/rss/RSSWorldNews", homepageUrl: "https://www.wsj.com/world", topicHints: ["world", "us-politics"], qualityPrior: 0.95 },
+  { kind: "rss", sourceClass: "news", name: "WSJ Markets", feedUrl: "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain", homepageUrl: "https://www.wsj.com/finance", topicHints: ["business"], qualityPrior: 0.95 },
+  { kind: "rss", sourceClass: "news", name: "CNBC", feedUrl: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114", homepageUrl: "https://www.cnbc.com", topicHints: ["business", "us-politics", "world"], qualityPrior: 0.9 },
 
   // ── Social / real-time ───────────────────────────────────────────────
   { kind: "hn", sourceClass: "social", name: "Hacker News", feedUrl: "topstories", homepageUrl: "https://news.ycombinator.com", topicHints: ["tech"], qualityPrior: 0.7 },
+  { kind: "x", sourceClass: "social", name: "X — Curated Journalists", feedUrl: "curated:inflow-v1", homepageUrl: "https://x.com", topicHints: ["world", "us-politics", "business", "tech"], qualityPrior: 0.78, credibilityTier: "social", sourceFamily: "x-curated", pollIntervalMinutes: 5, namedAuthorRequired: true },
   { kind: "bluesky", sourceClass: "social", name: "AP News", feedUrl: "apnews.com", homepageUrl: "https://bsky.app/profile/apnews.com", topicHints: ["world", "us-politics"], qualityPrior: 0.85 },
   { kind: "bluesky", sourceClass: "social", name: "Reuters", feedUrl: "reuters.com", homepageUrl: "https://bsky.app/profile/reuters.com", topicHints: ["world"], qualityPrior: 0.85 },
   { kind: "bluesky", sourceClass: "social", name: "Aaron Rupar", feedUrl: "atrupar.com", homepageUrl: "https://bsky.app/profile/atrupar.com", topicHints: ["us-politics"], qualityPrior: 0.6 },
@@ -65,3 +124,6 @@ export const SOURCE_REGISTRY: RegistryEntry[] = [
   { kind: "bluesky", sourceClass: "social", name: "Nate Silver", feedUrl: "natesilver.bsky.social", homepageUrl: "https://bsky.app/profile/natesilver.bsky.social", topicHints: ["us-politics"], qualityPrior: 0.75 },
   { kind: "bluesky", sourceClass: "social", name: "Marc Stein (Bluesky)", feedUrl: "steinline.bsky.social", homepageUrl: "https://bsky.app/profile/steinline.bsky.social", topicHints: ["nba"], qualityPrior: 0.8 },
 ];
+
+/** Fully policy-annotated registry used by ingestion and source-health UI. */
+export const SOURCE_REGISTRY: RegistryEntry[] = SOURCE_SEEDS.map(withPolicy);

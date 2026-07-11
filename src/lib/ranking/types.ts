@@ -1,5 +1,8 @@
 import type { AffinityDimension, Item, Source } from "../../db/schema";
 
+/** Metadata-only item shape used by feed ranking; article HTML stays off the hot path. */
+export type RankableItem = Omit<Item, "contentHtml"> & { contentHtml?: string | null };
+
 /**
  * One learned affinity weight plus the moment it was last touched.
  * `updatedAt` is required because decay is computed lazily: weights are only
@@ -19,7 +22,7 @@ export type AffinityMap = Map<string, AffinityEntry>;
 
 /** A feed candidate: an item joined with its source row. */
 export interface Candidate {
-  item: Item;
+  item: RankableItem;
   source: Source;
 }
 
@@ -31,7 +34,7 @@ export interface AlsoCoveredBy {
 
 /** One slot in the assembled feed. */
 export interface FeedEntry {
-  item: Item;
+  item: RankableItem;
   source: Source;
   /** The raw score from scoreItem (diversity penalties are not baked in). */
   score: number;

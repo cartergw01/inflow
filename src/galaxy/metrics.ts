@@ -44,7 +44,7 @@ export function activityIndex(stories: { publishedAt: string | Date }[], now = D
  */
 export function isBreaking(stories: MetricStory[], now = Date.now()): boolean {
   const corroborated = stories.some(
-    (s) => s.alsoCoveredBy.length >= 2 && now - new Date(s.publishedAt).getTime() < 2 * H,
+    (s) => s.alsoCoveredBy.length >= 1 && now - new Date(s.publishedAt).getTime() < 2 * H,
   );
   if (corroborated) return true;
   const burst = stories.filter(

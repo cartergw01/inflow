@@ -76,7 +76,11 @@ export function LibraryDrawer({ initialTab, onTabChange, onClose, onOpenStory }:
         {payload && initialTab === "sources" ? <div className="library-sources">
           <label className="library-source-search"><span className="sr-only">Filter sources</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter sources…" /></label>
           {filteredSources.map((source) => <div key={source.id} className="library-source" data-muted={source.muted}>
-            <div><strong>{source.name}</strong><span>{source.sourceClass} · {source.topicHints.slice(0, 2).map(topicLabel).join(", ") || source.kind}</span></div>
+            <div><strong>{source.name}</strong><span>
+              {source.credibilityTier} · every {source.pollIntervalMinutes}m
+              {source.lastSuccessfulFetchAt ? ` · checked ${timeAgo(source.lastSuccessfulFetchAt)} ago` : " · awaiting first check"}
+              {source.lastStatus?.startsWith("error") ? " · delayed" : ""}
+            </span><span>{source.sourceClass} · {source.topicHints.slice(0, 2).map(topicLabel).join(", ") || source.kind}</span></div>
             <button type="button" onClick={() => toggleSource(source)}>{source.muted ? "Unmute" : "Mute"}</button>
           </div>)}
         </div> : null}

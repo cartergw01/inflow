@@ -2,9 +2,10 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CameraState, GalaxyEngine, GalaxyPayload, GalaxyStory, HudLabel } from "../../galaxy/engine";
+import type { CameraState, GalaxyEngine, GalaxyPayload, GalaxyStory, GalaxyWirePayload, HudLabel } from "../../galaxy/engine";
 import { VISUALS_BY_SLUG } from "../../galaxy/worlds";
 import type { FeedItemDTO } from "../../lib/feed-data";
+import { timeAgo } from "../../lib/format";
 import { queueSignal, sendSignal } from "../../lib/signals-client";
 import { StoryFocus } from "./focus-card";
 import type { LibraryTab } from "./library-drawer";
@@ -12,6 +13,7 @@ import type { ReaderPayload } from "./reader-overlay";
 import type { WarpTarget } from "./warp-bar";
 
 const STATE_KEY = "inflow-galaxy-state";
+const CONTROLS_SEEN_KEY = "inflow-controls-seen";
 const ReaderOverlay = dynamic(() => import("./reader-overlay").then((mod) => mod.ReaderOverlay));
 const WarpBar = dynamic(() => import("./warp-bar").then((mod) => mod.WarpBar));
 const LibraryDrawer = dynamic(() => import("./library-drawer").then((mod) => mod.LibraryDrawer));
@@ -33,7 +35,10 @@ export function GalaxyApp({
   const panelRef = useRef<Panel>(initialPanel);
   const impressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressed = useRef(new Set<number>());
+  const readerCache = useRef(new Map<number, Promise<ReaderPayload | null>>());
 
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [data, setData] = useState<GalaxyPayload | null>(null);
@@ -46,6 +51,23 @@ export function GalaxyApp({
   const [searchIndex, setSearchIndex] = useState<{ id: number; title: string; world: string; sourceName: string }[]>([]);
   const [worldTransition, setWorldTransition] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [showHint, setShowHint] = useState(false);
+
+  const fetchReader = useCallback((itemId: number) => {
+    const existing = readerCache.current.get(itemId);
+    if (existing) return existing;
+    const request = fetch(`/api/item/${itemId}`)
+      .then((response) => response.ok ? response.json() as Promise<ReaderPayload> : null)
+      .catch(() => null);
+    readerCache.current.set(itemId, request);
+    return request;
+  }, []);
+
+  const dismissHint = useCallback(() => {
+    setShowHint(false);
+    try { localStorage.setItem(CONTROLS_SEEN_KEY, "1"); } catch { /* storage may be unavailable */ }
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+  }, []);
 
   const setPanel = useCallback((next: Panel) => {
     panelRef.current = next;
@@ -83,7 +105,8 @@ export function GalaxyApp({
           return;
         }
         if (!response.ok) throw new Error(`galaxy ${response.status}`);
-        const payload = (await response.json()) as GalaxyPayload;
+        const wirePayload = (await response.json()) as GalaxyWirePayload;
+        const payload = engineModule.hydrateGalaxyPayload(wirePayload);
         if (cancelled || !canvasRef.current) return;
         setData(payload);
 
@@ -101,6 +124,8 @@ export function GalaxyApp({
               return;
             }
             setFocus({ story, world });
+            if (prefetchTimer.current) clearTimeout(prefetchTimer.current);
+            prefetchTimer.current = setTimeout(() => { void fetchReader(story.id); }, 150);
             if (!impressed.current.has(story.id)) {
               if (impressionTimer.current) clearTimeout(impressionTimer.current);
               impressionTimer.current = setTimeout(() => {
@@ -130,9 +155,18 @@ export function GalaxyApp({
         (window as unknown as { __inflow?: unknown }).__inflow = engine;
         setSearchIndex(engine.getSearchIndex());
         setStatus("ready");
+        try {
+          if (localStorage.getItem(CONTROLS_SEEN_KEY) !== "1") {
+            setShowHint(true);
+            hintTimer.current = setTimeout(() => {
+              setShowHint(false);
+              localStorage.setItem(CONTROLS_SEEN_KEY, "1");
+            }, 9000);
+          }
+        } catch { /* onboarding hint is best-effort */ }
 
         if (initialItemId) {
-          const item = await fetch(`/api/item/${initialItemId}`).then((result) => result.ok ? result.json() as Promise<ReaderPayload> : null);
+          const item = await fetchReader(initialItemId);
           if (!cancelled && item) setReading(item);
         }
       } catch (error) {
@@ -145,6 +179,8 @@ export function GalaxyApp({
       engineRef.current?.dispose();
       engineRef.current = null;
       if (transitionTimer.current) clearTimeout(transitionTimer.current);
+      if (prefetchTimer.current) clearTimeout(prefetchTimer.current);
+      if (hintTimer.current) clearTimeout(hintTimer.current);
     };
     // Engine boot is intentionally one-shot; its API handles navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,21 +243,21 @@ export function GalaxyApp({
 
   const openReader = useCallback(async (story: GalaxyStory | FeedItemDTO) => {
     sendSignal({ itemId: story.id, type: "open" });
-    if (!story.hasBody) {
-      engineRef.current?.markRead(story.id);
-      open(story.url, "_blank", "noopener");
-      return;
-    }
     setDiving(true);
     const [item] = await Promise.all([
-      fetch(`/api/item/${story.id}`).then((response) => response.ok ? response.json() as Promise<ReaderPayload> : null),
+      fetchReader(story.id),
       engineRef.current?.diveIntoStory(story.id),
     ]);
     engineRef.current?.markRead(story.id);
+    setData((current) => current ? {
+      ...current,
+      newCount: story.isNew ? Math.max(0, current.newCount - 1) : current.newCount,
+      catchUp: current.catchUp.filter((entry) => entry.id !== story.id),
+    } : current);
     setDiving(false);
     if (item) setReading(item);
     else open(story.url, "_blank", "noopener");
-  }, []);
+  }, [fetchReader]);
 
   const closeReader = useCallback((readSeconds: number) => {
     if (reading && readSeconds >= 5) sendSignal({ itemId: reading.id, type: "read_time", value: readSeconds });
@@ -242,7 +278,7 @@ export function GalaxyApp({
 
   return (
     <div className="observatory-shell fixed inset-0 bg-[#04040a] text-white overflow-hidden">
-      <canvas ref={canvasRef} className="absolute inset-0 touch-none" aria-label="Interactive galaxy of personalized news" />
+      <canvas ref={canvasRef} onPointerDown={() => { if (showHint) dismissHint(); }} className="absolute inset-0 touch-none" aria-label="Interactive galaxy of personalized news" />
       <div className="absolute inset-0 pointer-events-none select-none" aria-hidden>
         {labels.map((label) => (
           <div key={label.key} className="galaxy-label" style={{ left: label.x, top: label.y, opacity: label.opacity }}>
@@ -256,11 +292,23 @@ export function GalaxyApp({
         <button type="button" className="galaxy-brand" onClick={() => engineRef.current?.exitToGalaxy()} aria-label="Galaxy overview">
           <span style={{ background: accent }} aria-hidden /><strong>INFLOW</strong>
         </button>
+        <div className="galaxy-hud__status" role="status">
+          {data?.freshness.staleSourceCount
+            ? `${data.freshness.staleSourceCount} source${data.freshness.staleSourceCount === 1 ? "" : "s"} delayed`
+            : data?.freshness.latestCheckedAt ? `Checked ${timeAgo(data.freshness.latestCheckedAt)} ago` : "Checking sources…"}
+        </div>
         <nav className="galaxy-tools" aria-label="Observatory tools">
-          <button type="button" onClick={openSearch} aria-label="Search" title="Search"><span aria-hidden>⌕</span></button>
+          {data?.catchUp[0] ? <button type="button" className="galaxy-tools__catchup" onClick={() => engineRef.current?.warpToStory(data.catchUp[0].id)}><span aria-hidden>●</span><b>Catch up · {data.newCount} new</b></button> : null}
+          <button type="button" className="galaxy-tools__labeled" onClick={() => engineRef.current?.exitToGalaxy()} aria-label="Return to full galaxy" title="Full galaxy"><span aria-hidden>⌂</span><b>Full galaxy</b></button>
+          <button type="button" className="galaxy-tools__labeled" onClick={openSearch} aria-label="Search" title="Search"><span aria-hidden>⌕</span><b>Search</b></button>
           <button type="button" onClick={() => openLibrary("saved")} aria-label="Open library" title="Library"><span aria-hidden>▣</span></button>
         </nav>
       </header>
+
+      {showHint ? <div className="galaxy-control-hint" role="status">
+        <span>Drag to move · scroll or pinch to zoom · tap a light to read</span>
+        <button type="button" onClick={dismissHint}>Got it</button>
+      </div> : null}
 
       {worldTransition ? <div className="world-transition" role="status">{worldTransition}</div> : null}
       {focus && worldData && !reading && !diving ? (
@@ -276,7 +324,7 @@ export function GalaxyApp({
         if (target.kind === "world") engineRef.current?.enterWorld(String(target.id));
         else engineRef.current?.warpToStory(Number(target.id));
       }} onClose={closePanel} /> : null}
-      {panel === "saved" || panel === "sources" ? (
+      {status === "ready" && (panel === "saved" || panel === "sources") ? (
         <LibraryDrawer initialTab={panel} onTabChange={openLibrary} onClose={closePanel} onOpenStory={openReader} />
       ) : null}
       {toast ? <div className="galaxy-toast" role="status">{toast}</div> : null}

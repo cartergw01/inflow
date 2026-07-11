@@ -76,6 +76,23 @@ export function stripHtml(html: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+export function countWords(htmlOrText: string | null): number {
+  if (!htmlOrText) return 0;
+  const text = stripHtml(htmlOrText);
+  return text ? text.split(/\s+/).length : 0;
+}
+
+/** Small deterministic content fingerprint; used only for change detection. */
+export function fingerprintContent(parts: Array<string | null | undefined>): string {
+  const input = parts.filter((part): part is string => typeof part === "string").join("\u241f");
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 const EXCERPT_MAX = 320;
 
 /**
@@ -117,11 +134,15 @@ export function sanitizeContent(html: string): string {
     ],
     allowedAttributes: {
       a: ["href", "title", "rel", "target"],
-      img: ["src", "alt", "title", "width", "height"],
+      img: ["src", "alt", "title", "width", "height", "loading", "decoding", "referrerpolicy"],
     },
     allowedSchemes: ["http", "https", "mailto"],
     transformTags: {
       a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer", target: "_blank" }),
+      img: (tagName, attribs) => ({
+        tagName,
+        attribs: { ...attribs, loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" },
+      }),
     },
   });
 }

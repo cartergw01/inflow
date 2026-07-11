@@ -2,6 +2,7 @@ import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
 
 const url = process.env.DATABASE_URL;
+const pgliteDir = process.env.PGLITE_DIR ?? ".pglite";
 
 export default defineConfig({
   schema: "./src/db/schema.ts",
@@ -9,5 +10,5 @@ export default defineConfig({
   dialect: "postgresql",
   ...(url
     ? { dbCredentials: { url } }
-    : { driver: "pglite", dbCredentials: { url: ".pglite" } }),
+    : { driver: "pglite", dbCredentials: { url: pgliteDir } }),
 });

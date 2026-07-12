@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { WORLD_VISUALS, VISUALS_BY_SLUG, activityScale, seeded, worldPosition, type WorldVisual } from "./worlds";
 import { computeBridges, controversy, discussionVelocity, type Bridge } from "./metrics";
+import { storyGlowSize, storyHitSize, storyVisualSize } from "./story-visuals";
 
 /**
  * The Observatory engine, v2 grammar. One persistent scene hosts the whole
@@ -102,7 +103,7 @@ export interface HudLabel {
   x: number;
   y: number;
   opacity: number;
-  /** For bridge labels: tap-to-focus target. */
+  /** Story represented by this label. */
   storyId?: number;
 }
 
@@ -228,6 +229,7 @@ export class GalaxyEngine {
   private glowUniforms = { uTime: { value: 0 }, uGlowScale: { value: 1 } };
   private glows = new Map<string, ReturnType<typeof makeGlowMesh>>();
   private instanced = new Map<string, THREE.InstancedMesh>();
+  private storyHitTargets = new Map<string, THREE.InstancedMesh>();
   private hitTargets: THREE.Mesh[] = [];
   private stories = new Map<number, StoryRef[]>();
   private byWorldIndex = new Map<string, GalaxyStory[]>();
@@ -239,6 +241,8 @@ export class GalaxyEngine {
   private hoverRing: THREE.Mesh;
   private focusSystem: FocusSystem | null = null;
   private focusedId: number | null = null;
+  private previewedId: number | null = null;
+  private hoveredStoryId: number | null = null;
 
   private data: GalaxyPayload;
 
@@ -642,12 +646,21 @@ export class GalaxyEngine {
 
     const n = world.entries.length;
     const count = n + 1;
-    const geo = new THREE.SphereGeometry(1, 12, 12);
+    const geo = new THREE.OctahedronGeometry(1, 0);
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const mesh = new THREE.InstancedMesh(geo, mat, Math.max(n, 1));
     mesh.userData.world = world.slug;
     group.add(mesh);
     this.instanced.set(world.slug, mesh);
+
+    const hitMesh = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1, 8, 8),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false }),
+      Math.max(n, 1),
+    );
+    hitMesh.userData.world = world.slug;
+    group.add(hitMesh);
+    this.storyHitTargets.set(world.slug, hitMesh);
 
     const glow = makeGlowMesh(count, this.glowUniforms);
     group.add(glow.mesh);
@@ -664,6 +677,9 @@ export class GalaxyEngine {
       const size = this.storySize(i);
       m4.makeScale(size, size, size).setPosition(p);
       mesh.setMatrixAt(i, m4);
+      const hitSize = storyHitSize(i);
+      m4.makeScale(hitSize, hitSize, hitSize).setPosition(p);
+      hitMesh.setMatrixAt(i, m4);
 
       const useAlt = seeded(story.id, 53) > 0.6;
       const tint = story.read ? EMBER : useAlt ? colAlt : colMain;
@@ -673,19 +689,21 @@ export class GalaxyEngine {
       const fresh = story.read ? 0 : Math.max(0, 1 - ageH / 24);
       glow.offset.setXYZ(i, p.x, p.y, p.z);
       glow.tint.setXYZ(i, tint.r, tint.g, tint.b);
-      glow.size.setX(i, size * (story.read ? 2.2 : 3.5 + fresh * 3));
+      glow.size.setX(i, storyGlowSize(i, fresh, story.read));
       glow.fresh.setX(i, fresh > 0.85 ? 1 : 0);
 
       const ref = { story, world: world.slug, index: i, local: p };
       this.stories.set(story.id, [...(this.stories.get(story.id) ?? []), ref]);
       if (story.isNew && !story.read) {
-        const ring = thinRing(size * 1.38, size * 1.48, visual.color, 0.68);
+        const ring = thinRing(size * 1.65, size * 1.82, visual.color, 0.62);
         ring.position.copy(p);
         group.add(ring);
         this.newRings.set(`${world.slug}:${story.id}`, ring);
       }
       if (story.saved) this.setSaved(story.id, true);
     });
+    mesh.instanceMatrix.needsUpdate = true;
+    hitMesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 
     // core halo as final glow instance — restrained
@@ -729,7 +747,7 @@ export class GalaxyEngine {
   }
 
   private storySize(index: number): number {
-    return Math.max(0.12, 0.34 - index * 0.007);
+    return storyVisualSize(index);
   }
 
   private getStoryRef(id: number, preferredWorld: string | null = this.view): StoryRef | null {
@@ -768,7 +786,8 @@ export class GalaxyEngine {
     el.addEventListener("pointerleave", () => {
       this.dragging = false;
       el.style.cursor = "default";
-      (this.hoverRing.material as THREE.MeshBasicMaterial).opacity = 0;
+      this.hoveredStoryId = null;
+      this.syncStoryPreview();
     });
     el.addEventListener(
       "wheel",
@@ -820,16 +839,16 @@ export class GalaxyEngine {
     let size = 1;
 
     if (this.view) {
-      const mesh = this.instanced.get(this.view);
+      const mesh = this.storyHitTargets.get(this.view);
       const hit = mesh ? this.raycaster.intersectObject(mesh, false)[0] : null;
       if (hit?.instanceId !== undefined) {
         const story = this.byWorldIndex.get(this.view)?.[hit.instanceId];
-        const ref = story ? this.getStoryRef(story.id) : null;
-        if (ref) {
-          position = this.worldGroups.get(ref.world)!.localToWorld(ref.local.clone());
-          size = this.storySize(ref.index) * 2.1;
-        }
+        this.hoveredStoryId = story?.id ?? null;
+        position = story ? new THREE.Vector3() : null;
+      } else {
+        this.hoveredStoryId = null;
       }
+      this.syncStoryPreview();
     } else {
       const bridgeHit = this.raycaster.intersectObjects(this.bridges.map((bridge) => bridge.tube), false)[0];
       if (bridgeHit) {
@@ -846,12 +865,40 @@ export class GalaxyEngine {
     }
 
     el.style.cursor = position ? "pointer" : this.dragging ? "grabbing" : "grab";
-    const material = this.hoverRing.material as THREE.MeshBasicMaterial;
-    material.opacity = position ? 0.42 : 0;
-    if (position) {
-      this.hoverRing.position.copy(position);
-      this.hoverRing.scale.setScalar(size);
+    if (!this.view) {
+      const material = this.hoverRing.material as THREE.MeshBasicMaterial;
+      if (this.previewedId !== null) this.syncStoryPreview();
+      else {
+        material.opacity = position ? 0.42 : 0;
+        if (position) {
+          this.hoverRing.position.copy(position);
+          this.hoverRing.scale.setScalar(size);
+        }
+      }
     }
+  }
+
+  private syncStoryPreview() {
+    const id = this.previewedId ?? this.hoveredStoryId;
+    const material = this.hoverRing.material as THREE.MeshBasicMaterial;
+    if (id === null || id === this.focusedId) {
+      material.opacity = 0;
+      return;
+    }
+    const ref = this.getStoryRef(id);
+    if (!ref) {
+      material.opacity = 0;
+      return;
+    }
+    this.hoverRing.position.copy(this.worldGroups.get(ref.world)!.localToWorld(ref.local.clone()));
+    this.hoverRing.scale.setScalar(Math.max(0.24, this.storySize(ref.index) * 3.1));
+    material.opacity = 0.58;
+  }
+
+  /** Preview a rail story without selecting it or moving the camera. */
+  previewStory(id: number | null) {
+    this.previewedId = id;
+    this.syncStoryPreview();
   }
 
   private clampRadius(r: number): number {
@@ -881,7 +928,7 @@ export class GalaxyEngine {
       return;
     }
 
-    const mesh = this.instanced.get(this.view);
+    const mesh = this.storyHitTargets.get(this.view);
     if (!mesh) return;
     const hits = this.raycaster.intersectObject(mesh, false);
     if (hits.length > 0 && hits[0].instanceId !== undefined) {
@@ -946,6 +993,7 @@ export class GalaxyEngine {
     if (!ref) return;
     this.disposeFocusSystem();
     this.focusedId = id;
+    this.syncStoryPreview();
     const world = this.worldGroups.get(ref.world)!;
     const wp = world.localToWorld(ref.local.clone());
     (this.focusRing.material as THREE.MeshBasicMaterial).opacity = 0.85;
@@ -1048,7 +1096,7 @@ export class GalaxyEngine {
       mesh.setColorAt(ref.index, EMBER);
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       const glow = this.glows.get(ref.world)!;
-      glow.size.setX(ref.index, this.storySize(ref.index) * 2.2);
+      glow.size.setX(ref.index, storyGlowSize(ref.index, 0, true));
       glow.fresh.setX(ref.index, 0);
       glow.tint.setXYZ(ref.index, EMBER.r, EMBER.g, EMBER.b);
       glow.size.needsUpdate = true;
@@ -1076,7 +1124,7 @@ export class GalaxyEngine {
       const key = `${ref.world}:${id}`;
       if (this.saveRings.has(key)) continue;
       const size = this.storySize(ref.index);
-      const ring = thinRing(size * 1.7, size * 1.9, 0xd9c26a, 0.85);
+      const ring = thinRing(size * 2.05, size * 2.28, 0xd9c26a, 0.82);
       ring.position.copy(ref.local);
       this.worldGroups.get(ref.world)!.add(ring);
       this.saveRings.set(key, ring);
@@ -1173,32 +1221,40 @@ export class GalaxyEngine {
           });
         }
       }
+      const focusedRef = this.focusedId === null ? null : this.getStoryRef(this.focusedId);
+      if (focusedRef) {
+        const group = this.worldGroups.get(focusedRef.world);
+        const story = focusedRef.story;
+        const p = group ? project(group.localToWorld(focusedRef.local.clone()).add(TMP.set(0, this.storySize(focusedRef.index) * 3 + 0.4, 0))) : null;
+        if (p) labels.push({
+          key: `s-${story.id}`,
+          kind: "story",
+          text: story.title.length > 54 ? `${story.title.slice(0, 54).trimEnd()}…` : story.title,
+          sub: story.sourceName.toUpperCase(),
+          color: story.read ? "#747886" : "#eef1f8",
+          x: p.x,
+          y: p.y,
+          opacity: story.read ? 0.62 : 0.94,
+          storyId: story.id,
+        });
+      }
     } else {
-      const entries = this.byWorldIndex.get(this.view) ?? [];
       const group = this.worldGroups.get(this.view);
-      if (group) {
-        const placed: Array<{ x: number; y: number }> = [];
-        const limit = this.isMobile ? 4 : 7;
-        for (let index = 0; index < entries.length && placed.length < limit; index++) {
-          const story = entries[index];
-          if (story.id === this.focusedId) continue;
-          const ref = this.getStoryRef(story.id);
-          if (!ref) continue;
-          const p = project(group.localToWorld(ref.local.clone()).add(TMP.set(0, this.storySize(index) * 3 + 0.4, 0)));
-          if (!p || p.x < 84 || p.x > innerWidth - 84 || p.y < 70 || p.y > innerHeight - 120) continue;
-          if (placed.some((other) => Math.abs(other.x - p.x) < (this.isMobile ? 170 : 230) && Math.abs(other.y - p.y) < 44)) continue;
-          placed.push(p);
-          labels.push({
-            key: `s-${story.id}`,
-            kind: "story",
-            text: story.title.length > 48 ? `${story.title.slice(0, 48).trimEnd()}…` : story.title,
-            sub: `${story.sourceName.toUpperCase()}${story.isNew ? " · NEW" : ""}`,
-            color: story.read ? "#747886" : "#eef1f8",
-            x: p.x,
-            y: p.y,
-            opacity: story.read ? 0.48 : 0.92,
-          });
-        }
+      const ref = this.focusedId === null ? null : this.getStoryRef(this.focusedId);
+      if (group && ref) {
+        const story = ref.story;
+        const p = project(group.localToWorld(ref.local.clone()).add(TMP.set(0, this.storySize(ref.index) * 3 + 0.4, 0)));
+        if (p) labels.push({
+          key: `s-${story.id}`,
+          kind: "story",
+          text: story.title.length > 54 ? `${story.title.slice(0, 54).trimEnd()}…` : story.title,
+          sub: story.sourceName.toUpperCase(),
+          color: story.read ? "#747886" : "#eef1f8",
+          x: p.x,
+          y: p.y,
+          opacity: story.read ? 0.62 : 0.94,
+          storyId: story.id,
+        });
       }
     }
     this.cb.onLabels(labels);
@@ -1274,6 +1330,8 @@ export class GalaxyEngine {
     }
 
     for (const ring of this.saveRings.values()) ring.lookAt(this.camera.position);
+    for (const ring of this.newRings.values()) ring.lookAt(this.camera.position);
+    this.hoverRing.lookAt(this.camera.position);
     if (this.focusedId !== null) {
       this.focusRing.lookAt(this.camera.position);
       if (this.focusSystem) this.focusSystem.ring.lookAt(this.camera.position);

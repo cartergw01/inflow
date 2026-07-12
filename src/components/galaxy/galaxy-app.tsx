@@ -325,6 +325,10 @@ export function GalaxyApp({
     setTimeout(() => setToast(null), 2400);
   }, []);
 
+  const previewStory = useCallback((story: GalaxyStory | null) => {
+    engineRef.current?.previewStory(story?.id ?? null);
+  }, []);
+
   const readerQueue = useMemo(() => {
     if (mode === "today" && briefing) return [...briefing.essentialIds, ...briefing.moreIds];
     if (!data) return [];
@@ -333,7 +337,7 @@ export function GalaxyApp({
   }, [briefing, data, mode, view]);
   const readerIndex = reading ? readerQueue.indexOf(reading.id) : -1;
   const accent = view ? VISUALS_BY_SLUG.get(view)?.css ?? "#8ba2ff" : "#8ba2ff";
-  const visibleLabels = labels.filter((label) => label.kind === "world" || (focus && label.kind === "story" && label.text === focus.story.title));
+  const visibleLabels = labels.filter((label) => label.kind === "world" || (focus && label.kind === "story" && label.storyId === focus.story.id));
   const freshness = briefing?.freshness ?? data?.freshness;
 
   return (
@@ -357,7 +361,7 @@ export function GalaxyApp({
 
       {mode === "today" ? briefing ? <BriefingPanel payload={briefing} onOpen={openReader} onOpenUniverse={() => openUniverse(null)} onSelectWorld={(slug) => openUniverse(slug)} onSaveChange={setStorySaved} /> : briefingStatus === "error" ? <div className="briefing-error"><strong>Your briefing is unavailable.</strong><button type="button" onClick={() => location.reload()}>Try again</button></div> : <BriefingSkeleton /> : null}
 
-      {mode === "universe" ? data && universeStatus === "ready" ? <UniverseRail data={data} view={view} focus={focus} onFocus={(story) => engineRef.current?.focusStory(story.id)} onOpen={openReader} onBack={() => view ? engineRef.current?.exitToGalaxy() : openToday()} onClear={() => engineRef.current?.clearFocus()} onMute={muteSource} onSaveChange={setStorySaved} /> : <div className="universe-loading" role="status"><span /><strong>{universeStatus === "error" ? "Universe unavailable" : "Charting your universe…"}</strong>{universeStatus === "error" ? <button type="button" onClick={() => location.reload()}>Retry</button> : null}</div> : null}
+      {mode === "universe" ? data && universeStatus === "ready" ? <UniverseRail data={data} view={view} focus={focus} onFocus={(story) => engineRef.current?.focusStory(story.id)} onPreview={previewStory} onOpen={openReader} onBack={() => view ? engineRef.current?.exitToGalaxy() : openToday()} onClear={() => engineRef.current?.clearFocus()} onMute={muteSource} onSaveChange={setStorySaved} /> : <div className="universe-loading" role="status"><span /><strong>{universeStatus === "error" ? "Universe unavailable" : "Charting your universe…"}</strong>{universeStatus === "error" ? <button type="button" onClick={() => location.reload()}>Retry</button> : null}</div> : null}
 
       {showHint && mode === "universe" ? <div className="galaxy-control-hint" role="status"><span>Drag to move · scroll or pinch to zoom · choose any story from the rail</span><button type="button" onClick={dismissHint}>Got it</button></div> : null}
       {worldTransition && mode === "universe" ? <div className="world-transition" role="status">{worldTransition}</div> : null}

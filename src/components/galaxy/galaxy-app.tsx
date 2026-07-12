@@ -9,7 +9,7 @@ import type { BriefingPayload, FeedItemDTO, GalaxyStoryDTO } from "../../lib/fee
 import { timeAgo } from "../../lib/format";
 import { queueSignal, sendSignal } from "../../lib/signals-client";
 import { BriefingPanel, BriefingSkeleton } from "./briefing-panel";
-import type { ReaderPayload } from "./reader-overlay";
+import type { ReaderNeighbor, ReaderPayload } from "./reader-overlay";
 import { UniverseRail } from "./universe-rail";
 import type { WarpTarget } from "./warp-bar";
 
@@ -48,13 +48,15 @@ export function GalaxyApp({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GalaxyEngine | null>(null);
+  const modeRef = useRef<AppMode>(initialMode);
   const impressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressed = useRef(new Set<number>());
   const readerCache = useRef(new Map<number, Promise<ReaderPayload | null>>());
   const readerReturnPath = useRef(initialWorld ? `/g/${initialWorld}` : initialMode === "universe" ? "/universe" : "/");
+  const readerRestoresFocus = useRef(false);
+  const readerNavigationLock = useRef(false);
 
   const [mode, setMode] = useState<AppMode>(initialMode);
   const [briefingStatus, setBriefingStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -65,12 +67,21 @@ export function GalaxyApp({
   const [labels, setLabels] = useState<HudLabel[]>([]);
   const [focus, setFocus] = useState<FocusState | null>(null);
   const [reading, setReading] = useState<ReaderPayload | null>(null);
+  const [readerPending, setReaderPending] = useState(false);
   const [diving, setDiving] = useState(false);
+  const [compactUniverse, setCompactUniverse] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState<{ id: number; title: string; world: string; sourceName: string }[]>([]);
-  const [worldTransition, setWorldTransition] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
+
+  useEffect(() => {
+    const query = matchMedia("(max-width: 900px)");
+    const update = () => setCompactUniverse(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
   const fetchReader = useCallback((itemId: number) => {
     const existing = readerCache.current.get(itemId);
@@ -92,6 +103,7 @@ export function GalaxyApp({
 
   const openToday = useCallback(() => {
     setSearchOpen(false);
+    modeRef.current = "today";
     setMode("today");
     document.title = "Your briefing — InFlow";
     if (location.pathname !== "/") history.pushState({ mode: "today" }, "", "/");
@@ -99,18 +111,23 @@ export function GalaxyApp({
 
   const openUniverse = useCallback((world?: string | null) => {
     setSearchOpen(false);
+    modeRef.current = "universe";
     setMode("universe");
-    if (world) engineRef.current?.enterWorld(world);
-    else if (view) engineRef.current?.exitToGalaxy();
-    const path = world ? `/g/${world}` : "/universe";
-    if (location.pathname !== path) history.pushState({ mode: "universe", world: world ?? null }, "", path);
+    const engine = engineRef.current;
+    if (engine) {
+      if (world) engine.enterWorld(world, { origin: "interactive" });
+      else engine.exitToGalaxy({ origin: "interactive" });
+    } else {
+      const path = world ? `/g/${world}` : "/universe";
+      if (location.pathname !== path) history.pushState({ mode: "universe", world: world ?? null }, "", path);
+    }
     try {
       if (localStorage.getItem(CONTROLS_SEEN_KEY) !== "1") {
         setShowHint(true);
         hintTimer.current = setTimeout(dismissHint, 9000);
       }
     } catch { /* hint is optional */ }
-  }, [dismissHint, view]);
+  }, [dismissHint]);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,17 +165,17 @@ export function GalaxyApp({
             }
           },
           onLabels: setLabels,
-          onView: (world) => {
+          onView: (world, origin) => {
             setView(world);
-            if (world) {
-              setWorldTransition(VISUALS_BY_SLUG.get(world)?.label ?? world);
-              if (transitionTimer.current) clearTimeout(transitionTimer.current);
-              transitionTimer.current = setTimeout(() => setWorldTransition(null), reducedMotion ? 0 : 900);
-            }
+            if (modeRef.current !== "universe") return;
             if (location.pathname.startsWith("/item/")) return;
             const path = world ? `/g/${world}` : "/universe";
             document.title = world ? `${VISUALS_BY_SLUG.get(world)?.label ?? world} — InFlow` : "Universe — InFlow";
-            if (location.pathname !== path && mode === "universe") history.replaceState({ mode: "universe", world }, "", path);
+            if (location.pathname !== path) {
+              const state = { mode: "universe", world };
+              if (origin === "interactive") history.pushState(state, "", path);
+              else history.replaceState(state, "", path);
+            }
           },
         }, { isMobile, initial, reducedMotion });
         engineRef.current = engine;
@@ -195,7 +212,6 @@ export function GalaxyApp({
       cancelled = true;
       engineRef.current?.dispose();
       engineRef.current = null;
-      if (transitionTimer.current) clearTimeout(transitionTimer.current);
       if (prefetchTimer.current) clearTimeout(prefetchTimer.current);
       if (hintTimer.current) clearTimeout(hintTimer.current);
     };
@@ -215,6 +231,16 @@ export function GalaxyApp({
     setData((current) => current ? {
       ...current,
       newCount: current.catchUp.some((story) => story.id === storyId) ? Math.max(0, current.newCount - 1) : current.newCount,
+      today: {
+        ...current.today,
+        newCount: current.today.entries.some((story) => story.id === storyId && story.isNew) ? Math.max(0, current.today.newCount - 1) : current.today.newCount,
+        entries: current.today.entries.map((story) => story.id === storyId ? { ...story, read: true, isNew: false } : story),
+      },
+      worlds: current.worlds.map((world) => ({
+        ...world,
+        newCount: world.entries.some((story) => story.id === storyId && story.isNew) ? Math.max(0, world.newCount - 1) : world.newCount,
+        entries: world.entries.map((story) => story.id === storyId ? { ...story, read: true, isNew: false } : story),
+      })),
       catchUp: current.catchUp.filter((story) => story.id !== storyId),
     } : current);
   }, []);
@@ -236,31 +262,45 @@ export function GalaxyApp({
     if (reading && readSeconds >= 5) sendSignal({ itemId: reading.id, type: "read_time", value: readSeconds });
     const itemId = reading?.id;
     setReading(null);
+    setReaderPending(false);
     setDiving(false);
     if (history.state?.inflowReader) history.back();
-    if (itemId && mode === "universe") setTimeout(() => engineRef.current?.focusStory(itemId), 0);
+    if (itemId && mode === "universe" && readerRestoresFocus.current) setTimeout(() => engineRef.current?.focusStory(itemId), 0);
+    readerRestoresFocus.current = false;
   }, [mode, reading]);
 
-  const openReaderById = useCallback(async (storyId: number, storyUrl?: string, replaceHistory = false) => {
+  const openReaderById = useCallback(async (storyId: number, storyUrl?: string, replaceHistory = false, restoreFocus = false) => {
+    if (readerNavigationLock.current) return;
+    readerNavigationLock.current = true;
+    const sequential = Boolean(reading);
+    const shouldDive = !sequential && mode === "universe" && restoreFocus;
+    readerRestoresFocus.current = sequential ? readerRestoresFocus.current : restoreFocus;
     sendSignal({ itemId: storyId, type: "open" });
-    setDiving(Boolean(engineRef.current && mode === "universe"));
-    const [item] = await Promise.all([
-      fetchReader(storyId),
-      mode === "universe" ? engineRef.current?.diveIntoStory(storyId) : Promise.resolve(),
-    ]);
-    markStoryRead(storyId);
-    setDiving(false);
-    if (item) {
-      setReading(item);
-      const returnPath = readerReturnPath.current = pathForContext();
-      const state = { inflowReader: true, itemId: storyId, returnPath };
-      if (replaceHistory) history.replaceState(state, "", `/item/${storyId}`);
-      else if (!location.pathname.startsWith("/item/")) history.pushState(state, "", `/item/${storyId}`);
-    } else if (storyUrl) open(storyUrl, "_blank", "noopener");
-  }, [fetchReader, markStoryRead, mode, pathForContext]);
+    setReaderPending(true);
+    setDiving(shouldDive && Boolean(engineRef.current));
+    try {
+      const [item] = await Promise.all([
+        fetchReader(storyId),
+        shouldDive ? engineRef.current?.diveIntoStory(storyId) : Promise.resolve(),
+      ]);
+      markStoryRead(storyId);
+      setDiving(false);
+      if (item) {
+        setReading(item);
+        const returnPath = sequential ? readerReturnPath.current : (readerReturnPath.current = pathForContext());
+        const state = { inflowReader: true, itemId: storyId, returnPath };
+        if (replaceHistory || sequential) history.replaceState(state, "", `/item/${storyId}`);
+        else if (!location.pathname.startsWith("/item/")) history.pushState(state, "", `/item/${storyId}`);
+      } else if (storyUrl) open(storyUrl, "_blank", "noopener");
+    } finally {
+      setDiving(false);
+      setReaderPending(false);
+      readerNavigationLock.current = false;
+    }
+  }, [fetchReader, markStoryRead, mode, pathForContext, reading]);
 
-  const openReader = useCallback((story: GalaxyStory | GalaxyStoryDTO | FeedItemDTO) => {
-    void openReaderById(story.id, story.url);
+  const openReader = useCallback((story: GalaxyStory | GalaxyStoryDTO | FeedItemDTO, restoreFocus = false) => {
+    void openReaderById(story.id, story.url, false, restoreFocus);
   }, [openReaderById]);
 
   useEffect(() => {
@@ -278,13 +318,15 @@ export function GalaxyApp({
       setReading(null);
       setSearchOpen(false);
       if (location.pathname === "/") {
+        modeRef.current = "today";
         setMode("today");
         return;
       }
+      modeRef.current = "universe";
       setMode("universe");
       const match = location.pathname.match(/^\/g\/([a-z-]+)/);
-      if (match) engineRef.current?.enterWorld(match[1], true);
-      else engineRef.current?.exitToGalaxy();
+      if (match) engineRef.current?.enterWorld(match[1], { fast: true, origin: "restore" });
+      else engineRef.current?.exitToGalaxy({ fast: true, origin: "restore" });
     };
     const interval = setInterval(persist, 4000);
     addEventListener("pagehide", persist);
@@ -336,12 +378,33 @@ export function GalaxyApp({
     return (world ?? data.today).entries.map((story) => story.id);
   }, [briefing, data, mode, view]);
   const readerIndex = reading ? readerQueue.indexOf(reading.id) : -1;
+  const readerNeighbors = useMemo(() => {
+    const findStory = (id: number): ReaderNeighbor | null => {
+      const briefingStory = briefing?.stories[String(id)];
+      if (briefingStory) return { id, title: briefingStory.title, sourceName: briefingStory.sourceName };
+      const galaxyStory = [data?.today, ...(data?.worlds ?? [])].filter(Boolean).flatMap((world) => world?.entries ?? []).find((story) => story.id === id);
+      return galaxyStory ? { id, title: galaxyStory.title, sourceName: galaxyStory.sourceName } : null;
+    };
+    return {
+      previous: readerIndex > 0 ? findStory(readerQueue[readerIndex - 1]) : null,
+      next: readerIndex >= 0 && readerIndex < readerQueue.length - 1 ? findStory(readerQueue[readerIndex + 1]) : null,
+    };
+  }, [briefing, data, readerIndex, readerQueue]);
+  const readerQueueLabel = mode === "today" ? "Briefing" : view ? VISUALS_BY_SLUG.get(view)?.label ?? "Universe" : "Overview";
+
+  useEffect(() => {
+    if (!reading) return;
+    if (readerNeighbors.previous) void fetchReader(readerNeighbors.previous.id);
+    if (readerNeighbors.next) void fetchReader(readerNeighbors.next.id);
+  }, [fetchReader, readerNeighbors, reading]);
+
   const accent = view ? VISUALS_BY_SLUG.get(view)?.css ?? "#8ba2ff" : "#8ba2ff";
   const visibleLabels = labels.filter((label) => label.kind === "world" || (focus && label.kind === "story" && label.storyId === focus.story.id));
   const freshness = briefing?.freshness ?? data?.freshness;
 
   return (
     <div className="observatory-shell fixed inset-0 bg-[#04040a] text-white overflow-hidden" data-mode={mode}>
+      <div className="contents" inert={reading ? true : undefined} aria-hidden={reading ? true : undefined}>
       <canvas ref={canvasRef} onPointerDown={() => { if (showHint) dismissHint(); }} className="galaxy-canvas absolute inset-0 touch-none" aria-hidden="true" tabIndex={-1} />
       <div className="galaxy-label-layer absolute inset-0 pointer-events-none select-none" aria-hidden>
         {visibleLabels.map((label) => <div key={label.key} className="galaxy-label" style={{ left: label.x, top: label.y, opacity: label.opacity }}><strong>{label.text}</strong>{label.sub ? <span style={{ color: label.color }}>{label.sub}</span> : null}</div>)}
@@ -361,24 +424,10 @@ export function GalaxyApp({
 
       {mode === "today" ? briefing ? <BriefingPanel payload={briefing} onOpen={openReader} onOpenUniverse={() => openUniverse(null)} onSelectWorld={(slug) => openUniverse(slug)} onSaveChange={setStorySaved} /> : briefingStatus === "error" ? <div className="briefing-error"><strong>Your briefing is unavailable.</strong><button type="button" onClick={() => location.reload()}>Try again</button></div> : <BriefingSkeleton /> : null}
 
-      {mode === "universe" ? data && universeStatus === "ready" ? <UniverseRail data={data} view={view} focus={focus} onFocus={(story) => engineRef.current?.focusStory(story.id)} onPreview={previewStory} onOpen={openReader} onBack={() => view ? engineRef.current?.exitToGalaxy() : openToday()} onClear={() => engineRef.current?.clearFocus()} onMute={muteSource} onSaveChange={setStorySaved} /> : <div className="universe-loading" role="status"><span /><strong>{universeStatus === "error" ? "Universe unavailable" : "Charting your universe…"}</strong>{universeStatus === "error" ? <button type="button" onClick={() => location.reload()}>Retry</button> : null}</div> : null}
+      {mode === "universe" ? data && universeStatus === "ready" ? <UniverseRail data={data} view={view} focus={focus} activationMode={compactUniverse ? "read" : "preview"} onSelectWorld={openUniverse} onFocus={(story) => engineRef.current?.focusStory(story.id)} onPreview={previewStory} onOpen={openReader} onBack={() => view ? engineRef.current?.exitToGalaxy({ origin: "interactive" }) : openToday()} onClear={() => engineRef.current?.clearFocus()} onMute={muteSource} onSaveChange={setStorySaved} /> : <div className="universe-loading" role="status"><span /><strong>{universeStatus === "error" ? "Universe unavailable" : "Charting your universe…"}</strong>{universeStatus === "error" ? <button type="button" onClick={() => location.reload()}>Retry</button> : null}</div> : null}
 
       {showHint && mode === "universe" ? <div className="galaxy-control-hint" role="status"><span>Drag to move · scroll or pinch to zoom · choose any story from the rail</span><button type="button" onClick={dismissHint}>Got it</button></div> : null}
-      {worldTransition && mode === "universe" ? <div className="world-transition" role="status">{worldTransition}</div> : null}
-
       <div className="dive-cover" data-active={diving} aria-hidden />
-      {reading ? <ReaderOverlay key={reading.id}
-        item={reading}
-        accent={accent}
-        contextLabel={mode === "universe" ? (view ? VISUALS_BY_SLUG.get(view)?.label ?? "Universe" : "Universe") : "Briefing"}
-        hasPrevious={readerIndex > 0}
-        hasNext={readerIndex >= 0 && readerIndex < readerQueue.length - 1}
-        onPrevious={() => readerIndex > 0 && void openReaderById(readerQueue[readerIndex - 1], undefined, true)}
-        onNext={() => readerIndex >= 0 && readerIndex < readerQueue.length - 1 && void openReaderById(readerQueue[readerIndex + 1], undefined, true)}
-        onExplore={() => { finishReaderClose(0); setTimeout(() => openUniverse(view), 0); }}
-        onClose={finishReaderClose}
-        onSaveChange={(saved) => setStorySaved(reading.id, saved)}
-      /> : null}
 
       {searchOpen ? <WarpBar stories={searchIndex} onWarp={(target: WarpTarget) => {
         setSearchOpen(false);
@@ -394,6 +443,24 @@ export function GalaxyApp({
       </nav>
 
       {toast ? <div className="galaxy-toast" role="status">{toast}</div> : null}
+      </div>
+
+      {reading ? <ReaderOverlay key={reading.id}
+        item={reading}
+        accent={accent}
+        contextLabel={readerQueueLabel}
+        queueLabel={readerQueueLabel}
+        position={readerIndex >= 0 ? readerIndex + 1 : 1}
+        total={Math.max(1, readerQueue.length)}
+        previous={readerNeighbors.previous}
+        next={readerNeighbors.next}
+        pending={readerPending}
+        onPrevious={() => readerNeighbors.previous && void openReaderById(readerNeighbors.previous.id, undefined, true)}
+        onNext={() => readerNeighbors.next && void openReaderById(readerNeighbors.next.id, undefined, true)}
+        onExplore={() => { finishReaderClose(0); setTimeout(() => openUniverse(view), 0); }}
+        onClose={finishReaderClose}
+        onSaveChange={(saved) => setStorySaved(reading.id, saved)}
+      /> : null}
     </div>
   );
 }

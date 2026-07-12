@@ -111,8 +111,10 @@ export interface HudLabel {
 export interface EngineCallbacks {
   onFocus(story: GalaxyStory | null, worldSlug: string | null, x: number, y: number): void;
   onLabels(labels: HudLabel[]): void;
-  onView(world: string | null): void;
+  onView(world: string | null, origin: NavigationOrigin): void;
 }
+
+export type NavigationOrigin = "interactive" | "restore";
 
 export interface CameraState {
   world: string | null;
@@ -218,6 +220,7 @@ interface FocusSystem {
 }
 
 export class GalaxyEngine {
+  private canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
@@ -272,6 +275,7 @@ export class GalaxyEngine {
   private disposed = false;
   private fpsSamples: number[] = [];
   private droppedDpr = false;
+  private resizeObserver: ResizeObserver;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -279,6 +283,7 @@ export class GalaxyEngine {
     cb: EngineCallbacks,
     opts: { isMobile: boolean; initial?: CameraState | null; reducedMotion?: boolean },
   ) {
+    this.canvas = canvas;
     this.cb = cb;
     this.data = data;
     this.isMobile = opts.isMobile;
@@ -287,9 +292,10 @@ export class GalaxyEngine {
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.isMobile, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    this.renderer.setSize(innerWidth, innerHeight);
+    const rect = canvas.getBoundingClientRect();
+    this.renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height), false);
 
-    this.camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 500);
+    this.camera = new THREE.PerspectiveCamera(52, Math.max(1, rect.width) / Math.max(1, rect.height), 0.1, 500);
     this.scene.fog = new THREE.FogExp2(0x030407, 0.006);
 
     this.buildStarfield();
@@ -316,10 +322,12 @@ export class GalaxyEngine {
         if (g) this.target.copy(g.position);
         else this.view = null;
       }
-      this.cb.onView(this.view);
+      this.cb.onView(this.view, "restore");
     }
 
     this.bindInput(canvas);
+    this.resizeObserver = new ResizeObserver(this.onResize);
+    this.resizeObserver.observe(canvas);
     addEventListener("resize", this.onResize);
     this.loop();
   }
@@ -856,7 +864,7 @@ export class GalaxyEngine {
   }
 
   private updateHover(el: HTMLCanvasElement, x: number, y: number) {
-    const ndc = new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+    const ndc = this.pointerNdc(x, y);
     this.raycaster.setFromCamera(ndc, this.camera);
     let position: THREE.Vector3 | null = null;
     let size = 1;
@@ -929,7 +937,7 @@ export class GalaxyEngine {
   }
 
   private tap(x: number, y: number) {
-    const ndc = new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+    const ndc = this.pointerNdc(x, y);
     this.raycaster.setFromCamera(ndc, this.camera);
 
     if (this.view === null) {
@@ -972,16 +980,24 @@ export class GalaxyEngine {
 
   /* ── navigation ────────────────────────────────────────────────── */
 
-  enterWorld(slug: string, fast = false) {
+  private pointerNdc(x: number, y: number) {
+    const rect = this.canvas.getBoundingClientRect();
+    return new THREE.Vector2(
+      ((x - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+      -((y - rect.top) / Math.max(1, rect.height)) * 2 + 1,
+    );
+  }
+
+  enterWorld(slug: string, options: { fast?: boolean; origin?: NavigationOrigin } = {}) {
     const group = this.worldGroups.get(slug);
     if (!group) return;
     this.clearFocus();
     this.view = slug;
-    this.cb.onView(slug);
+    this.cb.onView(slug, options.origin ?? "interactive");
     const scale = this.worldScales.get(slug) ?? 1;
     this.flyTo(
       { target: group.position.clone(), theta: this.theta + 0.7, phi: 1.25, radius: (this.isMobile ? 19 : 14) * Math.max(scale, 0.8) },
-      fast ? 450 : 1400,
+      options.fast ? 350 : this.isMobile ? 450 : 650,
     );
   }
 
@@ -1005,11 +1021,14 @@ export class GalaxyEngine {
     if (paused) this.clearInteractiveMotion();
   }
 
-  exitToGalaxy() {
+  exitToGalaxy(options: { fast?: boolean; origin?: NavigationOrigin } = {}) {
     this.clearFocus();
     this.view = null;
-    this.cb.onView(null);
-    this.flyTo({ target: new THREE.Vector3(0, 0, 0), theta: this.theta - 0.5, phi: 1.12, radius: this.isMobile ? 110 : 72 }, 900);
+    this.cb.onView(null, options.origin ?? "interactive");
+    this.flyTo(
+      { target: new THREE.Vector3(0, 0, 0), theta: this.theta - 0.5, phi: 1.12, radius: this.isMobile ? 110 : 72 },
+      options.fast ? 300 : this.isMobile ? 450 : 650,
+    );
   }
 
   focusStory(id: number) {
@@ -1184,7 +1203,7 @@ export class GalaxyEngine {
     const ref = this.getStoryRef(id);
     if (!ref) return;
     if (this.view !== ref.world) {
-      this.enterWorld(ref.world, true);
+      this.enterWorld(ref.world, { fast: true });
       setTimeout(() => this.focusStory(id), 500);
     } else {
       this.focusStory(id);
@@ -1194,9 +1213,12 @@ export class GalaxyEngine {
   /* ── frame loop ────────────────────────────────────────────────── */
 
   private onResize = () => {
-    this.camera.aspect = innerWidth / innerHeight;
+    const rect = this.canvas.getBoundingClientRect();
+    const width = Math.max(1, rect.width);
+    const height = Math.max(1, rect.height);
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(innerWidth, innerHeight);
+    this.renderer.setSize(width, height, false);
   };
 
   private emitFocus() {
@@ -1204,14 +1226,16 @@ export class GalaxyEngine {
     const ref = this.getStoryRef(this.focusedId)!;
     const wp = this.worldGroups.get(ref.world)!.localToWorld(ref.local.clone());
     wp.project(this.camera);
-    this.cb.onFocus(ref.story, ref.world, ((wp.x + 1) / 2) * innerWidth, ((1 - wp.y) / 2) * innerHeight);
+    const rect = this.canvas.getBoundingClientRect();
+    this.cb.onFocus(ref.story, ref.world, rect.left + ((wp.x + 1) / 2) * rect.width, rect.top + ((1 - wp.y) / 2) * rect.height);
   }
 
   private emitLabels() {
     const labels: HudLabel[] = [];
+    const rect = this.canvas.getBoundingClientRect();
     const project = (wp: THREE.Vector3) => {
       const v = wp.clone().project(this.camera);
-      return v.z < 1 ? { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight } : null;
+      return v.z < 1 ? { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height } : null;
     };
 
     if (this.view === null) {
@@ -1222,7 +1246,7 @@ export class GalaxyEngine {
         const scale = this.worldScales.get(slug) ?? 1;
         const p = project(group.position.clone().add(TMP.set(0, -(slug === "today" ? 4 : 5 * scale) - 1.2, 0)));
         if (!p) continue;
-        p.x = Math.min(Math.max(p.x, 76), innerWidth - 76);
+        p.x = Math.min(Math.max(p.x, rect.left + 76), rect.right - 76);
         labels.push({
           key: `w-${slug}`,
           kind: "world",
@@ -1404,6 +1428,7 @@ export class GalaxyEngine {
 
   dispose() {
     this.disposed = true;
+    this.resizeObserver.disconnect();
     removeEventListener("resize", this.onResize);
     this.renderer.dispose();
   }

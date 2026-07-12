@@ -412,7 +412,7 @@ body {
 .universe-story-scroll::before { top:0; background:linear-gradient(to bottom,rgba(7,9,15,.98),rgba(7,9,15,0)); }
 .universe-story-scroll::after { bottom:0; background:linear-gradient(to top,rgba(7,9,15,.98),rgba(7,9,15,0)); }
 .universe-story-scroll[data-at-start=true]::before,.universe-story-scroll[data-at-end=true]::after { opacity:0; }
-.universe-story-list { height:100%; min-height:0; overflow-y:auto; overscroll-behavior:contain; scroll-snap-type:y proximity; scrollbar-color:rgba(255,255,255,.18) transparent; scrollbar-width:thin; touch-action:pan-y; }
+.universe-story-list { height:100%; min-height:0; overflow-y:auto; overscroll-behavior:contain; scroll-snap-type:y proximity; scrollbar-color:rgba(255,255,255,.18) transparent; scrollbar-width:thin; touch-action:pan-y; -webkit-overflow-scrolling:touch; }
 .universe-story-list li { scroll-snap-align:start; border-bottom:1px solid rgba(255,255,255,.08); transition:opacity 120ms ease,background-color 120ms ease; }
 .universe-story-list li[data-read=true]{opacity:.43}.universe-story-list li[data-selected=true]{opacity:1;background:rgba(255,255,255,.065);box-shadow:inset 2px 0 0 var(--rail-accent,#8ba2ff)}
 .universe-story-list button { display:grid; grid-template-columns:26px 1fr 8px; align-items:start; gap:10px; width:100%; min-height:calc((100dvh - var(--shell-header) - 116px)/6); padding:22px 17px; text-align:left; }

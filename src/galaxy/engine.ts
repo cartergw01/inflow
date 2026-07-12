@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { WORLD_VISUALS, VISUALS_BY_SLUG, activityScale, seeded, worldPosition, type WorldVisual } from "./worlds";
 import { computeBridges, controversy, discussionVelocity, type Bridge } from "./metrics";
 import { storyGlowSize, storyHitSize, storyVisualSize } from "./story-visuals";
+import { motionEase, panDistanceScale, pinchZoomFactor, wheelZoomFactor } from "./input-motion";
 
 /**
  * The Observatory engine, v2 grammar. One persistent scene hosts the whole
@@ -257,9 +258,13 @@ export class GalaxyEngine {
   private pointer = new THREE.Vector2();
   private dragging = false;
   private moved = false;
+  private dragDistance = 0;
+  private activePointerType = "mouse";
   private lastPinch = 0;
   private pinching = false;
   private paused = false;
+  private panTarget: THREE.Vector3 | null = null;
+  private zoomTarget: number | null = null;
 
   private lastFrameAt = performance.now();
   private elapsedSeconds = 0;
@@ -762,6 +767,8 @@ export class GalaxyEngine {
       if (this.paused || this.pinching) return;
       this.dragging = true;
       this.moved = false;
+      this.dragDistance = 0;
+      this.activePointerType = e.pointerType;
       this.pointer.set(e.clientX, e.clientY);
     });
     el.addEventListener("pointermove", (e) => {
@@ -772,7 +779,8 @@ export class GalaxyEngine {
       }
       const dx = e.clientX - this.pointer.x;
       const dy = e.clientY - this.pointer.y;
-      if (Math.abs(dx) + Math.abs(dy) > 4) this.moved = true;
+      this.dragDistance += Math.hypot(dx, dy);
+      if (this.dragDistance > (this.activePointerType === "touch" ? 10 : 4)) this.moved = true;
       this.pointer.set(e.clientX, e.clientY);
       if (this.anim) return;
       this.panBy(dx, dy);
@@ -789,12 +797,17 @@ export class GalaxyEngine {
       this.hoveredStoryId = null;
       this.syncStoryPreview();
     });
+    el.addEventListener("pointercancel", () => {
+      this.dragging = false;
+      this.moved = true;
+    });
     el.addEventListener(
       "wheel",
       (e) => {
         e.preventDefault();
         if (this.anim || this.paused) return;
-        this.radius = this.clampRadius(this.radius * (1 + Math.sign(e.deltaY) * 0.08));
+        const base = this.zoomTarget ?? this.radius;
+        this.zoomTarget = this.clampRadius(base * wheelZoomFactor(e.deltaY, e.deltaMode, innerHeight, this.isMobile));
       },
       { passive: false },
     );
@@ -802,34 +815,44 @@ export class GalaxyEngine {
       "touchmove",
       (e) => {
         if (this.paused) return;
-        if (e.touches.length === 2) {
-          e.preventDefault();
-          this.pinching = true;
-          this.moved = true;
-          const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-          if (this.lastPinch > 0 && !this.anim) this.radius = this.clampRadius(this.radius * (this.lastPinch / d));
-          this.lastPinch = d;
+        if (e.touches.length !== 2) {
+          this.lastPinch = 0;
+          return;
         }
+        e.preventDefault();
+        this.pinching = true;
+        this.moved = true;
+        this.dragging = false;
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        if (this.lastPinch > 0 && !this.anim) {
+          const base = this.zoomTarget ?? this.radius;
+          this.zoomTarget = this.clampRadius(base * pinchZoomFactor(this.lastPinch, d, this.isMobile));
+        }
+        this.lastPinch = d;
       },
       { passive: false },
     );
-    el.addEventListener("touchend", () => {
+    const endTouch = () => {
       this.lastPinch = 0;
       this.pinching = false;
       this.dragging = false;
-    });
+    };
+    el.addEventListener("touchend", endTouch);
+    el.addEventListener("touchcancel", endTouch);
   }
 
   private panBy(dx: number, dy: number) {
-    const distanceScale = this.radius * (this.isMobile ? 0.0024 : 0.0018);
+    const distanceScale = panDistanceScale(this.radius, this.isMobile);
+    const nextTarget = this.panTarget?.clone() ?? this.target.clone();
     TMP_RIGHT.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     TMP_UP.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
-    this.target.addScaledVector(TMP_RIGHT, -dx * distanceScale);
-    this.target.addScaledVector(TMP_UP, dy * distanceScale);
+    nextTarget.addScaledVector(TMP_RIGHT, -dx * distanceScale);
+    nextTarget.addScaledVector(TMP_UP, dy * distanceScale);
     const anchor = this.view ? this.worldGroups.get(this.view)?.position ?? TMP.set(0, 0, 0) : TMP.set(0, 0, 0);
     const maxOffset = this.view ? 7 * (this.worldScales.get(this.view) ?? 1) : 24;
-    const offset = this.target.clone().sub(anchor);
-    if (offset.length() > maxOffset) this.target.copy(anchor).add(offset.setLength(maxOffset));
+    const offset = nextTarget.clone().sub(anchor);
+    if (offset.length() > maxOffset) nextTarget.copy(anchor).add(offset.setLength(maxOffset));
+    this.panTarget = nextTarget;
   }
 
   private updateHover(el: HTMLCanvasElement, x: number, y: number) {
@@ -979,6 +1002,7 @@ export class GalaxyEngine {
   setPaused(paused: boolean) {
     this.paused = paused;
     this.dragging = false;
+    if (paused) this.clearInteractiveMotion();
   }
 
   exitToGalaxy() {
@@ -1066,6 +1090,7 @@ export class GalaxyEngine {
   }
 
   private flyTo(to: { target: THREE.Vector3; theta: number; phi: number; radius: number }, dur: number, done?: () => void) {
+    this.clearInteractiveMotion();
     if (this.reducedMotion) {
       this.target.copy(to.target);
       this.theta = to.theta;
@@ -1082,6 +1107,11 @@ export class GalaxyEngine {
       to,
       done,
     };
+  }
+
+  private clearInteractiveMotion() {
+    this.panTarget = null;
+    this.zoomTarget = null;
   }
 
   /* ── state mutations from the app ──────────────────────────────── */
@@ -1285,6 +1315,24 @@ export class GalaxyEngine {
         const done = this.anim.done;
         this.anim = null;
         done?.();
+      }
+    }
+
+    if (!this.anim) {
+      const ease = this.reducedMotion ? 1 : motionEase(dt, this.isMobile);
+      if (this.panTarget) {
+        this.target.lerp(this.panTarget, ease);
+        if (this.target.distanceToSquared(this.panTarget) < 0.0001) {
+          this.target.copy(this.panTarget);
+          this.panTarget = null;
+        }
+      }
+      if (this.zoomTarget !== null) {
+        this.radius += (this.zoomTarget - this.radius) * ease;
+        if (Math.abs(this.zoomTarget - this.radius) < 0.002) {
+          this.radius = this.zoomTarget;
+          this.zoomTarget = null;
+        }
       }
     }
 

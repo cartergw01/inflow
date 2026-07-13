@@ -63,7 +63,7 @@ export function LibraryDrawer({ initialTab, onTabChange, onClose, onOpenStory }:
       <main className={onClose ? "galaxy-drawer library-drawer" : "galaxy-drawer library-drawer library-drawer--standalone"} onClick={(event) => event.stopPropagation()} aria-label="Library">
         <header className="galaxy-drawer__header">
           <div><span className="galaxy-drawer__eyebrow">Observatory library</span><h2>Library</h2></div>
-          {onClose ? <button type="button" onClick={onClose} aria-label="Close library" title="Close library">×</button> : <Link href="/" aria-label="Back to briefing">Back to briefing</Link>}
+          {onClose ? <button type="button" onClick={onClose} aria-label="Close library" title="Close library">×</button> : <Link href="/" aria-label="Back to Today">Back to Today</Link>}
         </header>
         <div className="library-tabs" role="tablist" aria-label="Library sections">
           {(["saved", "sources"] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={initialTab === tab} onClick={() => onTabChange(tab)}>
@@ -74,7 +74,7 @@ export function LibraryDrawer({ initialTab, onTabChange, onClose, onOpenStory }:
         {!payload && !error ? <div className="library-skeleton" aria-label="Loading library" aria-busy="true">{Array.from({ length: 5 }, (_, index) => <span key={index} />)}</div> : null}
         {payload && initialTab === "saved" ? <div className="library-list">
           {payload.saved.length > 0 ? <div className="library-filters"><button type="button" aria-pressed={savedFilter === "all"} onClick={() => setSavedFilter("all")}>All</button><button type="button" aria-pressed={savedFilter === "unread"} onClick={() => setSavedFilter("unread")}>Unread</button><label><span className="sr-only">Filter saved stories by topic</span><select value={savedTopic} onChange={(event) => setSavedTopic(event.target.value)}><option value="all">Every topic</option>{savedTopics.map((topic) => <option key={topic} value={topic}>{topicLabel(topic)}</option>)}</select></label></div> : null}
-          {payload.saved.length === 0 ? <div className="library-empty"><strong>Your saved reading list is ready.</strong><p>Save a story from the briefing or universe and it will stay here.</p><Link href="/">Find something worth reading</Link></div> : null}
+          {payload.saved.length === 0 ? <div className="library-empty"><strong>Your saved reading list is ready.</strong><p>Save a story from Today or the universe and it will stay here.</p><Link href="/">Find something worth reading</Link></div> : null}
           {payload.saved.length > 0 && filteredSaved.length === 0 ? <div className="galaxy-drawer__state">No saved stories match these filters.</div> : null}
           {filteredSaved.map((story) => <article key={story.id} className="library-story" data-read={story.read}>
             <div className="library-story__meta">{story.topics[0] ? topicLabel(story.topics[0]) : story.sourceName} · {timeAgo(story.publishedAt)} ago</div>

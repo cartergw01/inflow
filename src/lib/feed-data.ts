@@ -162,6 +162,7 @@ export type GalaxyStoryDTO = Pick<
   | "read"
   | "credibilityTier"
   | "isNew"
+  | "exploration"
   | "status"
   | "verificationStatus"
 >;
@@ -184,6 +185,7 @@ function toGalaxyStory(entry: FeedItemDTO): GalaxyStoryDTO {
     read: entry.read,
     credibilityTier: entry.credibilityTier,
     isNew: entry.isNew,
+    exploration: entry.exploration,
     status: entry.status,
     verificationStatus: entry.verificationStatus,
   };

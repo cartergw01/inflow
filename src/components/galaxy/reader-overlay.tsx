@@ -55,7 +55,7 @@ function SettingsIcon() {
   return <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden><path d="M4 5h12M4 10h12M4 15h12M7 3v4M13 8v4M8 13v4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>;
 }
 
-export function ReaderOverlay({ item, accent, contextLabel = "Briefing", queueLabel = contextLabel, position, total, previous, next, pending = false, onPrevious, onNext, onExplore, onClose, onSaveChange }: {
+export function ReaderOverlay({ item, accent, contextLabel = "Today", queueLabel = contextLabel, position, total, previous, next, pending = false, onPrevious, onNext, onExplore, onClose, onSaveChange }: {
   item: ReaderPayload;
   accent: string;
   contextLabel?: string;

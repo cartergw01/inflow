@@ -488,7 +488,7 @@ function Launch({ selected, onEnter, onEdit }: {
           <p className={styles.eyebrow}>Coordinates locked</p>
           <h1 id="launch-title" ref={headingRef} tabIndex={-1}>Your universe is taking shape.</h1>
           <p>
-            {subjects.length} {subjects.length === 1 ? "world" : "worlds"}, one living briefing—ready to move with you.
+            {subjects.length} {subjects.length === 1 ? "world" : "worlds"}, one evolving news universe—ready to move with you.
           </p>
         </header>
 
@@ -519,7 +519,7 @@ function Launch({ selected, onEnter, onEdit }: {
 
         <div className={styles.launchActions}>
           <button type="button" className={styles.primaryButton} onClick={onEnter}>
-            <span>Enter InFlow</span>
+            <span>Explore my universe</span>
             <span className={styles.buttonArrow} aria-hidden="true">→</span>
           </button>
           <button type="button" className={styles.editButton} onClick={onEdit}>Edit my worlds</button>
@@ -529,7 +529,7 @@ function Launch({ selected, onEnter, onEdit }: {
   );
 }
 
-export function Onboarding({ nextPath = "/" }: { nextPath?: string }) {
+export function Onboarding({ nextPath = "/universe" }: { nextPath?: string }) {
   const router = useRouter();
   const [step, setStep] = useState<JourneyStep>("origin");
   const [selected, setSelected] = useState<SubjectId[]>(() => [...DEFAULT_SUBJECT_IDS]);

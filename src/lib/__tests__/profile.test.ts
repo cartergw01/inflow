@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   PROFILE_COOKIE,
   internalPathWithSearch,
+  onboardingLaunchPath,
   sanitizeNextPath,
   setProfileCookie,
   validateProfileInterests,
@@ -86,5 +87,11 @@ describe("profile interests contract", () => {
       tag: ["one", "two"],
       empty: undefined,
     })).toBe("/g/ai?from=briefing&tag=one&tag=two");
+  });
+
+  it("hands a first-run root visit to the universe while preserving deep links", () => {
+    expect(onboardingLaunchPath("/")).toBe("/universe");
+    expect(onboardingLaunchPath("/g/ai?story=42")).toBe("/g/ai?story=42");
+    expect(onboardingLaunchPath("/saved")).toBe("/saved");
   });
 });

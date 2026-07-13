@@ -52,8 +52,10 @@ export function UniverseRail({ data, view, focus, activationMode, onSelectWorld,
   const entries = view ? world.entries : data.today.entries;
   const visual = VISUALS_BY_SLUG.get(view ?? "today");
   const connections = focus ? connectedWorlds(focus.story, data.worlds) : [];
-  const title = view ? world.label : "Universe";
-  const subtitle = view ? `${world.newCount} new · ranked for you` : "Your strongest signals across every world";
+  const title = view ? world.label : "Your universe";
+  const subtitle = view
+    ? `${world.newCount} new · ranked for you`
+    : `${data.worlds.length} ${data.worlds.length === 1 ? "world" : "worlds"} in orbit · ranked for you`;
   const selectedId = focus?.story.id ?? null;
   const selectedIndex = useMemo(() => entries.findIndex((story) => story.id === selectedId), [entries, selectedId]);
   const scrollKey = view ?? "universe";
@@ -157,7 +159,7 @@ export function UniverseRail({ data, view, focus, activationMode, onSelectWorld,
     <aside className="universe-rail" data-collapsed={collapsed} style={{ "--rail-accent": visual?.css ?? "#8ba2ff" } as React.CSSProperties} aria-label={`${title} stories`}>
       <button type="button" className="universe-rail__handle" onClick={toggleCollapsed} aria-expanded={!collapsed} aria-label={collapsed ? "Expand story list" : "Collapse story list"}><span /></button>
       <header className="universe-rail__header">
-        <button type="button" onClick={onBack} aria-label={view ? "Back to universe" : "Back to briefing"}><BackIcon /></button>
+        <button type="button" onClick={onBack} aria-label={view ? "Back to your universe" : "Open Today"}><BackIcon /></button>
         <div className="universe-rail__heading"><div><h1>{title}</h1><p>{subtitle}</p></div><span className="universe-rail__range">{range.end ? `${pad(range.start + 1)}–${pad(range.end)}` : "00–00"} / {pad(entries.length)}</span></div>
         {focus ? <button type="button" onClick={onClear} aria-label="Clear selected story"><CloseIcon /></button> : <span />}
       </header>

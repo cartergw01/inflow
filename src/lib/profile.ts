@@ -151,3 +151,11 @@ export function sanitizeNextPath(value: unknown, fallback = "/"): string {
     return fallback;
   }
 }
+
+/**
+ * A first-run journey builds a universe, so the default handoff should reveal
+ * that universe. Explicit deep links still win and return to their source.
+ */
+export function onboardingLaunchPath(nextPath: string): string {
+  return nextPath === "/" ? "/universe" : nextPath;
+}

@@ -1084,6 +1084,32 @@ export class GalaxyEngine {
     if (paused) this.clearInteractiveMotion();
   }
 
+  /**
+   * Today is a reading surface with a deliberately still background. Snap its
+   * core into place and render once so it cannot inherit an unrelated world.
+   */
+  showWorldSnapshot(slug: string) {
+    const group = this.worldGroups.get(slug);
+    if (!group) return;
+    this.clearFocus();
+    this.clearInteractiveMotion();
+    this.anim = null;
+    this.view = slug;
+    this.cb.onView(slug, "restore");
+    const scale = this.worldScales.get(slug) ?? 1;
+    this.target.copy(group.position);
+    this.phi = 1.25;
+    this.radius = (this.isMobile ? 19 : 14) * Math.max(scale, 0.8);
+    this.camera.position.set(
+      this.target.x + this.radius * Math.sin(this.phi) * Math.sin(this.theta),
+      this.target.y + this.radius * Math.cos(this.phi),
+      this.target.z + this.radius * Math.sin(this.phi) * Math.cos(this.theta),
+    );
+    this.camera.lookAt(this.target);
+    this.emitLabels();
+    this.renderer.render(this.scene, this.camera);
+  }
+
   exitToGalaxy(options: { fast?: boolean; origin?: NavigationOrigin } = {}) {
     this.clearFocus();
     this.view = null;

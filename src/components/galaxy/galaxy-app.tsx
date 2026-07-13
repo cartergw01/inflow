@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CameraState, GalaxyEngine, GalaxyPayload, GalaxyStory, GalaxyWirePayload, HudLabel } from "../../galaxy/engine";
+import { initialGalaxyCamera, type GalaxyAppMode } from "../../galaxy/navigation-state";
 import { VISUALS_BY_SLUG } from "../../galaxy/worlds";
 import type { BriefingPayload, FeedItemDTO, GalaxyStoryDTO } from "../../lib/feed-data";
 import { timeAgo } from "../../lib/format";
@@ -18,7 +19,6 @@ const CONTROLS_SEEN_KEY = "inflow-controls-seen";
 const ReaderOverlay = dynamic(() => import("./reader-overlay").then((mod) => mod.ReaderOverlay));
 const WarpBar = dynamic(() => import("./warp-bar").then((mod) => mod.WarpBar));
 
-type AppMode = "today" | "universe";
 interface FocusState { story: GalaxyStory; world: string }
 
 function SearchIcon() {
@@ -43,12 +43,12 @@ export function GalaxyApp({
   initialItemId = null,
 }: {
   initialWorld: string | null;
-  initialMode?: AppMode;
+  initialMode?: GalaxyAppMode;
   initialItemId?: number | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GalaxyEngine | null>(null);
-  const modeRef = useRef<AppMode>(initialMode);
+  const modeRef = useRef<GalaxyAppMode>(initialMode);
   const impressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,7 +58,7 @@ export function GalaxyApp({
   const readerRestoresFocus = useRef(false);
   const readerNavigationLock = useRef(false);
 
-  const [mode, setMode] = useState<AppMode>(initialMode);
+  const [mode, setMode] = useState<GalaxyAppMode>(initialMode);
   const [briefingStatus, setBriefingStatus] = useState<"loading" | "ready" | "error">("loading");
   const [briefing, setBriefing] = useState<BriefingPayload | null>(null);
   const [universeStatus, setUniverseStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -99,13 +99,14 @@ export function GalaxyApp({
     if (hintTimer.current) clearTimeout(hintTimer.current);
   }, []);
 
-  const pathForContext = useCallback(() => view ? `/g/${view}` : mode === "universe" ? "/universe" : "/", [mode, view]);
+  const pathForContext = useCallback(() => mode === "today" ? "/" : view ? `/g/${view}` : "/universe", [mode, view]);
 
   const openToday = useCallback(() => {
     setSearchOpen(false);
     modeRef.current = "today";
+    engineRef.current?.showWorldSnapshot("today");
     setMode("today");
-    document.title = "Your briefing — InFlow";
+    document.title = "Today — InFlow";
     if (location.pathname !== "/") history.pushState({ mode: "today" }, "", "/");
   }, []);
 
@@ -147,9 +148,7 @@ export function GalaxyApp({
         try { saved = JSON.parse(localStorage.getItem(STATE_KEY) ?? "null"); } catch { saved = null; }
         const isMobile = innerWidth < 900 || "ontouchstart" in window;
         const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-        const initial: CameraState | null = initialWorld
-          ? { world: initialWorld, theta: saved?.theta ?? 0.4, phi: saved?.phi ?? 1.25, radius: isMobile ? 19 : 14 }
-          : saved;
+        const initial: CameraState = initialGalaxyCamera({ initialMode, initialWorld, saved, isMobile });
         const engine = new engineModule.GalaxyEngine(canvasRef.current, payload, {
           onFocus: (story, world) => {
             if (!story || !world) {
@@ -398,7 +397,7 @@ export function GalaxyApp({
       next: readerIndex >= 0 && readerIndex < readerQueue.length - 1 ? findStory(readerQueue[readerIndex + 1]) : null,
     };
   }, [briefing, data, readerIndex, readerQueue]);
-  const readerQueueLabel = mode === "today" ? "Briefing" : view ? VISUALS_BY_SLUG.get(view)?.label ?? "Universe" : "Overview";
+  const readerQueueLabel = mode === "today" ? "Today" : view ? VISUALS_BY_SLUG.get(view)?.label ?? "Universe" : "Overview";
 
   useEffect(() => {
     if (!reading) return;

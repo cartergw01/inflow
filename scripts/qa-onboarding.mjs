@@ -63,10 +63,23 @@ try {
   await keyboard.waitForFunction(() => document.querySelector("h1")?.textContent?.includes("Your universe is taking shape."));
   assert(await keyboard.evaluate(() => document.querySelectorAll("[aria-label='Your selected worlds'] li").length === 4), "Keyboard selection did not persist");
   await keyboard.keyboard.press("Tab");
-  assert(await keyboard.evaluate(() => document.activeElement?.textContent?.includes("Enter InFlow")), "Enter action was not next in tab order");
+  assert(await keyboard.evaluate(() => document.activeElement?.textContent?.includes("Explore my universe")), "Explore action was not next in tab order");
   await keyboard.keyboard.press("Enter");
-  await keyboard.waitForFunction(() => location.pathname === "/");
+  await keyboard.waitForFunction(() => location.pathname === "/universe");
+  await keyboard.waitForSelector(".universe-rail");
+  await keyboard.waitForFunction(() => Boolean(window.__inflow));
+  const universeHandoff = await keyboard.evaluate(() => ({
+    title: document.querySelector(".universe-rail h1")?.textContent?.trim(),
+    world: window.__inflow?.getCameraState().world,
+    activeNav: document.querySelector(".inflow-primary-nav [aria-current='page']")?.textContent?.trim(),
+  }));
+  assert(universeHandoff.title === "Your universe" && universeHandoff.world === null && universeHandoff.activeNav === "Universe", "Launch did not reveal the selected-world overview");
+  await keyboard.goto(qaUrl("qa-keyboard", "/"), { waitUntil: "domcontentloaded" });
+  await keyboard.waitForSelector(".briefing-panel");
+  await keyboard.waitForFunction(() => Boolean(window.__inflow));
+  assert(await keyboard.evaluate(() => window.__inflow?.getCameraState().world === "today"), "Today inherited an unrelated saved world");
   results.keyboard = "pass";
+  results.launchHandoff = "pass";
   await keyboard.close();
 
   const retry = await browser.newPage();

@@ -63,7 +63,9 @@ await page.screenshot({ path: `${outdir}/4-world${tag}.png` });
 await page.click(isMobile ? ".universe-story-list__spark" : ".universe-story-list__headline");
 await page.waitForSelector(".universe-focus", { timeout: 10000 });
 await page.screenshot({ path: `${outdir}/5-focus${tag}.png` });
-await page.click(".universe-focus__read");
+// Dispatch directly so Puppeteer's auto-scroll cannot move the focus panel
+// between the verified focus state and the reader action.
+await page.$eval(".universe-focus__read", (element) => element.click());
 await page.waitForSelector(".reader-surface", { timeout: 30000 });
 await page.screenshot({ path: `${outdir}/6-world-reader${tag}.png` });
 

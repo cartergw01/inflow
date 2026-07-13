@@ -44,6 +44,14 @@ describe("scoreItem", () => {
     expect(withAffinity - without).toBeCloseTo(SCORE_WEIGHTS.topicAffinity * Math.tanh(1), 10);
   });
 
+  it("reads legacy broad affinities as a fallback for replacement leaves", () => {
+    const item = makeItem({ topics: ["startups"], publishedAt: NOW });
+    const base = { item, source: social, seedInterests: [], now: NOW };
+    const legacy = scoreItem({ ...base, affinities: makeAffinities([["topic:tech", 3]]) });
+    const canonical = scoreItem({ ...base, affinities: makeAffinities([["topic:startups", 3]]) });
+    expect(legacy).toBeCloseTo(canonical, 10);
+  });
+
   it("averages topic affinity over known topics instead of summing", () => {
     const item = makeItem({ topics: ["nba", "tech"], publishedAt: NOW });
     const affinities = makeAffinities([

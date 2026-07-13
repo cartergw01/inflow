@@ -1,5 +1,9 @@
 export type ReaderDirection = "previous" | "next";
 
+export function restoreReaderFocus(target: Pick<HTMLElement, "focus"> | null): void {
+  target?.focus({ preventScroll: true });
+}
+
 export function readerSwipeDirection({
   startX,
   startY,

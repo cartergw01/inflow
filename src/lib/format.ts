@@ -1,18 +1,7 @@
-const TOPIC_LABELS: Record<string, string> = {
-  nba: "NBA",
-  tech: "Tech",
-  ai: "AI",
-  vc: "VC",
-  taiwan: "Taiwan",
-  "us-politics": "US Politics",
-  world: "World",
-  business: "Business",
-  science: "Science",
-  media: "Media",
-};
+import { subjectById } from "./subjects";
 
 export function topicLabel(topic: string): string {
-  return TOPIC_LABELS[topic] ?? topic.replace(/-/g, " ");
+  return subjectById(topic)?.label ?? topic.replace(/-/g, " ");
 }
 
 /** Compact relative time: 4m, 2h, then weekday, then a date. */

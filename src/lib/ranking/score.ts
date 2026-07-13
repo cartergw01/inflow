@@ -1,5 +1,6 @@
 import type { Item, Source, SourceClass } from "../../db/schema";
-import { affinityKey, type AffinityMap } from "./types";
+import { resolveSubjectId, type SubjectId } from "../subjects";
+import { affinityKey, type AffinityEntry, type AffinityMap } from "./types";
 
 /**
  * The scoring formula's term weights, in one place so tests and future
@@ -45,6 +46,23 @@ function normalizeAffinity(weight: number): number {
   return Math.tanh(weight / AFFINITY_TANH_SCALE);
 }
 
+const LEGACY_AFFINITY_KEYS: Partial<Record<SubjectId, readonly string[]>> = {
+  startups: ["tech"],
+  markets: ["business"],
+  "us-politics": ["politics"],
+};
+
+/** Canonical lookup with read-only fallback for affinities learned pre-migration. */
+export function topicAffinityEntry(affinities: AffinityMap, topic: string): AffinityEntry | undefined {
+  const canonical = resolveSubjectId(topic);
+  const keys = canonical ? [canonical, ...(LEGACY_AFFINITY_KEYS[canonical] ?? [])] : [topic];
+  for (const key of keys) {
+    const entry = affinities.get(affinityKey("topic", key));
+    if (entry) return entry;
+  }
+  return undefined;
+}
+
 /**
  * Exponential freshness decay in [0, 1]: 1 at publish time, 0.5 after one
  * class-specific half-life. Future-dated items clamp to 1 rather than
@@ -79,7 +97,7 @@ export function scoreItem({ item, source, affinities, seedInterests, now }: Scor
   let topicNormSum = 0;
   let topicCount = 0;
   for (const topic of item.topics) {
-    const entry = affinities.get(affinityKey("topic", topic));
+    const entry = topicAffinityEntry(affinities, topic);
     if (entry) {
       topicNormSum += normalizeAffinity(entry.weight);
       topicCount += 1;
@@ -98,7 +116,7 @@ export function scoreItem({ item, source, affinities, seedInterests, now }: Scor
   const recency = recencyScore(item.publishedAt, source.sourceClass, now);
 
   const hasColdStartSeedTopic = item.topics.some(
-    (topic) => seedInterests.includes(topic) && !affinities.has(affinityKey("topic", topic)),
+    (topic) => seedInterests.includes(resolveSubjectId(topic) ?? topic) && !topicAffinityEntry(affinities, topic),
   );
   const seedBoost = hasColdStartSeedTopic ? SCORE_WEIGHTS.seedBoost : 0;
 

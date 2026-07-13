@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fullDate, timeAgo, topicLabel } from "../../lib/format";
 import { sendSignal } from "../../lib/signals-client";
-import { readerSwipeDirection } from "./reader-navigation";
+import { readerSwipeDirection, restoreReaderFocus } from "./reader-navigation";
 
 export interface ReaderPayload {
   id: number;
@@ -102,7 +102,7 @@ export function ReaderOverlay({ item, accent, contextLabel = "Briefing", queueLa
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      previousFocus.current?.focus();
+      restoreReaderFocus(previousFocus.current);
     };
   }, []);
 

@@ -1,9 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { readerSwipeDirection } from "../../components/galaxy/reader-navigation";
+import { describe, expect, it, vi } from "vitest";
+import { readerSwipeDirection, restoreReaderFocus } from "../../components/galaxy/reader-navigation";
 
 const swipe = (startX: number, startY: number, endX: number, endY: number, viewportWidth = 390) => readerSwipeDirection({ startX, startY, endX, endY, viewportWidth });
 
 describe("reader swipe navigation", () => {
+  it("restores the opening control without changing its scroll container", () => {
+    const focus = vi.fn();
+    restoreReaderFocus({ focus });
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
   it("maps decisive horizontal gestures to story direction", () => {
     expect(swipe(300, 300, 180, 310)).toBe("next");
     expect(swipe(100, 300, 220, 290)).toBe("previous");

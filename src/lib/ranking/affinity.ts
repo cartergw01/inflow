@@ -1,4 +1,5 @@
 import type { Item, Signal, SignalType, Source } from "../../db/schema";
+import { normalizeSubjectIds } from "../subjects";
 import { affinityKey, type AffinityMap } from "./types";
 
 /**
@@ -101,7 +102,10 @@ export function applySignal(
     next.set(key, { weight: clampWeight(decayed + d), updatedAt: now });
   };
 
-  for (const topic of item.topics) {
+  // All new learning is written into the canonical selectable vocabulary.
+  // Hidden aliases let signals on not-yet-backfilled legacy items land on the
+  // replacement leaf without perpetuating broad `tech`/`business` rows.
+  for (const topic of normalizeSubjectIds(item.topics, 24)) {
     bump(affinityKey("topic", topic), delta);
   }
 

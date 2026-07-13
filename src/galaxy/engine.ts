@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { WORLD_VISUALS, VISUALS_BY_SLUG, activityScale, seeded, worldPosition, type WorldVisual } from "./worlds";
+import { VISUALS_BY_SLUG, activityScale, seeded, worldPosition, type WorldVisual } from "./worlds";
 import { computeBridges, controversy, discussionVelocity, type Bridge } from "./metrics";
 import { storyGlowSize, storyHitSize, storyVisualSize } from "./story-visuals";
 import { motionEase, panDistanceScale, pinchZoomFactor, wheelZoomFactor } from "./input-motion";
@@ -300,10 +300,10 @@ export class GalaxyEngine {
 
     this.buildStarfield();
     this.buildEcliptic();
-    this.buildWorld(data.today, VISUALS_BY_SLUG.get("today")!);
-    for (const w of data.worlds) {
+    this.buildWorld(data.today, VISUALS_BY_SLUG.get("today")!, 0, 1);
+    for (const [index, w] of data.worlds.entries()) {
       const visual = VISUALS_BY_SLUG.get(w.slug);
-      if (visual) this.buildWorld(w, visual);
+      if (visual) this.buildWorld(w, visual, index, data.worlds.length);
     }
     this.buildBridges();
 
@@ -450,6 +450,68 @@ export class GalaxyEngine {
         }
         pins.instanceMatrix.needsUpdate = true;
         chip.add(pins);
+        break;
+      }
+      case "exchange": {
+        const exchange = new THREE.Group();
+        exchange.rotation.set(0.08, -0.42, -0.04);
+        group.add(exchange);
+        const base = mk(new THREE.CylinderGeometry(1.72 * scale, 1.9 * scale, 0.22 * scale, 32), 0x3c3420, 0.92);
+        base.position.y = -0.84 * scale;
+        const bars = new THREE.InstancedMesh(
+          new THREE.BoxGeometry(0.22 * scale, 1 * scale, 0.22 * scale),
+          new THREE.MeshBasicMaterial({ color: visual.color }),
+          9,
+        );
+        const matrix = new THREE.Matrix4();
+        const heights = [0.55, 1.2, 0.82, 1.55, 1.05, 1.78, 1.36, 2.02, 1.68];
+        heights.forEach((height, index) => {
+          matrix.makeScale(1, height, 1).setPosition((index - 4) * 0.36 * scale, (-0.76 + height * 0.5) * scale, ((index % 2) - 0.5) * 0.38 * scale);
+          bars.setMatrixAt(index, matrix);
+        });
+        bars.instanceMatrix.needsUpdate = true;
+        exchange.add(bars);
+        const chartPoints = heights.map((height, index) => new THREE.Vector3((index - 4) * 0.36 * scale, (height - 0.42) * scale, 0.42 * scale));
+        exchange.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(chartPoints), new THREE.LineBasicMaterial({ color: visual.altColor, transparent: true, opacity: 0.82 })));
+        const orbit = mk(new THREE.TorusGeometry(2.25 * scale, 0.018 * scale, 5, 80), visual.altColor, 0.26);
+        orbit.rotation.x = Math.PI / 2;
+        break;
+      }
+      case "constellation": {
+        const constellation = new THREE.Group();
+        constellation.rotation.set(0.38, 0.62, -0.12);
+        group.add(constellation);
+        const shell = mk(new THREE.IcosahedronGeometry(1.45 * scale, 1), visual.color, 0.13);
+        (shell.material as THREE.MeshBasicMaterial).wireframe = true;
+        const points = [
+          [-1.35, 0.3, 0.25], [-0.72, 1.18, -0.24], [0.1, 0.68, 0.72], [1.22, 1.02, 0.08],
+          [1.44, -0.38, -0.3], [0.38, -1.25, 0.5], [-0.92, -1.08, -0.5], [0.06, -0.08, -0.82],
+        ].map(([x, y, z]) => new THREE.Vector3(x * scale, y * scale, z * scale));
+        const edges = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 0], [2, 7], [5, 7], [0, 7]];
+        const edgePoints = edges.flatMap(([a, b]) => [points[a], points[b]]);
+        constellation.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(edgePoints), new THREE.LineBasicMaterial({ color: visual.altColor, transparent: true, opacity: 0.56 })));
+        const nodes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.1 * scale, 8, 8), new THREE.MeshBasicMaterial({ color: visual.altColor }), points.length);
+        const matrix = new THREE.Matrix4();
+        points.forEach((point, index) => nodes.setMatrixAt(index, matrix.makeTranslation(point.x, point.y, point.z)));
+        nodes.instanceMatrix.needsUpdate = true;
+        constellation.add(nodes);
+        break;
+      }
+      case "atom": {
+        mk(new THREE.IcosahedronGeometry(0.9 * scale, 2), visual.color);
+        const nucleus = mk(new THREE.IcosahedronGeometry(1.04 * scale, 1), visual.altColor, 0.2);
+        (nucleus.material as THREE.MeshBasicMaterial).wireframe = true;
+        const rotations: Array<[number, number, number]> = [[Math.PI / 2, 0, 0], [0.42, 0.92, 0.18], [-0.42, -0.92, -0.18]];
+        rotations.forEach(([x, y, z]) => {
+          const orbit = mk(new THREE.TorusGeometry(2.08 * scale, 0.022 * scale, 5, 80), visual.altColor, 0.42);
+          orbit.rotation.set(x, y, z);
+        });
+        const electrons = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12 * scale, 9, 9), new THREE.MeshBasicMaterial({ color: visual.altColor }), 6);
+        const matrix = new THREE.Matrix4();
+        const electronPoints = [[2.08, 0, 0], [-2.08, 0, 0], [0, 1.62, 1.3], [0, -1.62, -1.3], [1.12, 1.55, -0.82], [-1.12, -1.55, 0.82]];
+        electronPoints.forEach(([x, y, z], index) => electrons.setMatrixAt(index, matrix.makeTranslation(x * scale, y * scale, z * scale)));
+        electrons.instanceMatrix.needsUpdate = true;
+        group.add(electrons);
         break;
       }
       case "isle": {
@@ -639,12 +701,12 @@ export class GalaxyEngine {
     }
   }
 
-  private buildWorld(world: GalaxyWorldData, visual: WorldVisual) {
+  private buildWorld(world: GalaxyWorldData, visual: WorldVisual, index: number, worldCount: number) {
     const scale = world.slug === "today" ? 1 : activityScale(world.activity);
     this.worldScales.set(world.slug, scale);
 
     const group = new THREE.Group();
-    group.position.copy(TMP.copy(worldPosition(visual, world.affinity) as THREE.Vector3Like));
+    group.position.copy(TMP.copy(worldPosition(visual, world.affinity, index, worldCount) as THREE.Vector3Like));
     if (this.isMobile && world.slug !== "today") group.position.multiplyScalar(0.72);
     this.scene.add(group);
     this.worldGroups.set(world.slug, group);
@@ -729,9 +791,9 @@ export class GalaxyEngine {
   /** Light trails between galaxies for cross-topic stories. */
   private buildBridges() {
     const bridges = computeBridges(
-      [this.data.today, ...this.data.worlds].map((w) => ({ slug: w.slug, entries: w.entries })),
+      this.data.worlds.map((w) => ({ slug: w.slug, entries: w.entries })),
       5,
-    ).filter((b) => b.a !== "today" && b.b !== "today");
+    );
 
     bridges.forEach((bridge, i) => {
       const ga = this.worldGroups.get(bridge.a);
@@ -1003,11 +1065,12 @@ export class GalaxyEngine {
 
   stepWorld(direction: -1 | 1) {
     if (this.paused || this.focusedId !== null) return;
-    const current = WORLD_VISUALS.findIndex((world) => world.slug === this.view);
+    const worldOrder = [this.data.today.slug, ...this.data.worlds.map((world) => world.slug)];
+    const current = worldOrder.indexOf(this.view ?? "");
     const next = current < 0
-      ? direction > 0 ? 0 : WORLD_VISUALS.length - 1
-      : (current + direction + WORLD_VISUALS.length) % WORLD_VISUALS.length;
-    this.enterWorld(WORLD_VISUALS[next].slug);
+      ? direction > 0 ? 0 : worldOrder.length - 1
+      : (current + direction + worldOrder.length) % worldOrder.length;
+    this.enterWorld(worldOrder[next]);
   }
 
   rotateOverview(direction: -1 | 1) {

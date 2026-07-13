@@ -1,5 +1,6 @@
-import { affinityKey, type AffinityMap, type AlsoCoveredBy, type Candidate, type FeedEntry } from "./types";
-import { scoreItem } from "./score";
+import { resolveSubjectId } from "../subjects";
+import type { AffinityMap, AlsoCoveredBy, Candidate, FeedEntry } from "./types";
+import { scoreItem, topicAffinityEntry } from "./score";
 
 /**
  * Feed assembly knobs. Defaults live here (not inline) so tests and tuning
@@ -49,8 +50,8 @@ function isExplorationCandidate(
   seedInterests: readonly string[],
 ): boolean {
   return candidate.item.topics.every((topic) => {
-    if (seedInterests.includes(topic)) return false;
-    const entry = affinities.get(affinityKey("topic", topic));
+    if (seedInterests.includes(resolveSubjectId(topic) ?? topic)) return false;
+    const entry = topicAffinityEntry(affinities, topic);
     return !entry || entry.weight <= 0;
   });
 }
@@ -144,7 +145,7 @@ export function rankFeed({ candidates, affinities, seedInterests, now, opts }: R
         const c = pool[i];
         let adjusted = c.score;
         if (havePrev) {
-          const primaryTopic: string | undefined = c.item.topics[0];
+          const primaryTopic = c.item.topics[0] ? resolveSubjectId(c.item.topics[0]) ?? c.item.topics[0] : undefined;
           if (primaryTopic !== undefined && primaryTopic === prevPrimaryTopic) {
             adjusted -= sameTopicPenalty;
           }
@@ -167,7 +168,7 @@ export function rankFeed({ candidates, affinities, seedInterests, now, opts }: R
       ...(exploration ? { exploration: true } : {}),
       ...(picked.alsoCoveredBy ? { alsoCoveredBy: picked.alsoCoveredBy } : {}),
     });
-    prevPrimaryTopic = picked.item.topics[0];
+    prevPrimaryTopic = picked.item.topics[0] ? resolveSubjectId(picked.item.topics[0]) ?? picked.item.topics[0] : undefined;
     prevSourceId = picked.source.id;
     havePrev = true;
   }

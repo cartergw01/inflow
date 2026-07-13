@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { GalaxyPayload, GalaxyStory, GalaxyWorldData } from "../../galaxy/engine";
-import { CATEGORIES } from "../../lib/categories";
 import { timeAgo } from "../../lib/format";
 import { sendSignal } from "../../lib/signals-client";
 import { VISUALS_BY_SLUG } from "../../galaxy/worlds";
@@ -15,8 +14,10 @@ function BackIcon() {
   return <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden><path d="m12.5 4-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-function connectedWorlds(story: GalaxyStory) {
-  return CATEGORIES.slice(1).filter((category) => category.topics.some((topic) => story.topics.includes(topic))).map((category) => category.label);
+function connectedWorlds(story: GalaxyStory, worlds: GalaxyWorldData[]) {
+  return worlds
+    .filter((world) => world.entries.some((entry) => entry.id === story.id) || story.topics.includes(world.slug))
+    .map((world) => world.label);
 }
 
 function verification(story: GalaxyStory) {
@@ -50,7 +51,7 @@ export function UniverseRail({ data, view, focus, activationMode, onSelectWorld,
   const world: GalaxyWorldData = view === "today" ? data.today : data.worlds.find((candidate) => candidate.slug === view) ?? data.today;
   const entries = view ? world.entries : data.today.entries;
   const visual = VISUALS_BY_SLUG.get(view ?? "today");
-  const connections = focus ? connectedWorlds(focus.story) : [];
+  const connections = focus ? connectedWorlds(focus.story, data.worlds) : [];
   const title = view ? world.label : "Universe";
   const subtitle = view ? `${world.newCount} new · ranked for you` : "Your strongest signals across every world";
   const selectedId = focus?.story.id ?? null;
@@ -68,14 +69,13 @@ export function UniverseRail({ data, view, focus, activationMode, onSelectWorld,
     label: "Overview",
     newCount: data.newCount,
     color: VISUALS_BY_SLUG.get("today")?.css ?? "#8ba2ff",
-  }, ...CATEGORIES.slice(1).map((category) => {
-    const worldData = data.worlds.find((candidate) => candidate.slug === category.slug);
+  }, ...data.worlds.map((worldData) => {
     return {
-      slug: category.slug,
-      key: category.slug,
-      label: category.shortLabel ?? category.label,
-      newCount: worldData?.newCount ?? 0,
-      color: VISUALS_BY_SLUG.get(category.slug)?.css ?? "#8ba2ff",
+      slug: worldData.slug,
+      key: worldData.slug,
+      label: worldData.label,
+      newCount: worldData.newCount,
+      color: VISUALS_BY_SLUG.get(worldData.slug)?.css ?? "#8ba2ff",
     };
   })], [data]);
   const activeWorldKey = view ?? "overview";

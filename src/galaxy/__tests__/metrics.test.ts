@@ -101,7 +101,7 @@ describe("computeBridges", () => {
   it("ranks by prominence and caps the count", () => {
     const mk = (id: number) => story({ id, topics: ["us-politics", "world"], title: `S${id}` });
     const entries = [mk(1), mk(2), mk(3), mk(4), mk(5), mk(6)];
-    const bridges = computeBridges([{ slug: "politics", entries }], 3);
+    const bridges = computeBridges([{ slug: "us-politics", entries }, { slug: "world", entries: [...entries].reverse() }], 3);
     expect(bridges).toHaveLength(3);
     expect(bridges[0].storyId).toBe(1);
   });

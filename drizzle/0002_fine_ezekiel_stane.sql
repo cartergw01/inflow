@@ -1,0 +1,1 @@
+CREATE INDEX "items_topics_gin_idx" ON "items" USING gin ("topics");

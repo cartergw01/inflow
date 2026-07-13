@@ -15,11 +15,20 @@ import {
 } from "../db/schema";
 import { rankFeed } from "./ranking/feed";
 import { affinityKey, type AffinityMap, type FeedEntry } from "./ranking/types";
-import { CATEGORIES, type Category } from "./categories";
+import type { Category } from "./categories";
+import {
+  DEFAULT_SUBJECT_IDS,
+  SUBJECTS,
+  normalizeSubjectIds,
+  subjectById,
+  type Subject,
+  type SubjectId,
+} from "./subjects";
 import { activityIndex, isBreaking } from "../galaxy/metrics";
 
 const CANDIDATE_WINDOW_MS = 7 * 24 * 3600_000;
 const CANDIDATE_LIMIT = 500;
+const SUBJECT_CANDIDATE_LIMIT = 100;
 const FEED_LIMIT = 80;
 const WORDS_PER_MINUTE = 230;
 const LATEST_WINDOW_MS = 12 * 3600_000;
@@ -28,6 +37,51 @@ const FIRST_VISIT_NEW_WINDOW_MS = 6 * 3600_000;
 const WORLD_ENTRY_LIMIT = 28;
 const BRIEFING_ESSENTIAL_COUNT = 8;
 const BRIEFING_MORE_COUNT = 20;
+
+/**
+ * A profile's ordered choices are the source of truth for its visible worlds.
+ * Old broad IDs are resolved by the catalog; an empty/invalid legacy profile
+ * receives the same five defaults as the onboarding skip path.
+ */
+export function resolveSelectedSubjects(interests: readonly unknown[] | null | undefined): Subject[] {
+  const normalized = normalizeSubjectIds(interests);
+  const ids: readonly SubjectId[] = normalized.length > 0 ? normalized : DEFAULT_SUBJECT_IDS;
+  return ids.flatMap((id) => {
+    const subject = subjectById(id);
+    return subject ? [subject] : [];
+  });
+}
+
+/** Preserve pool priority while removing items repeated by global and scoped queries. */
+export function mergeCandidateGroups<T extends { item: { id: number } }>(
+  groups: readonly (readonly T[])[],
+): T[] {
+  const merged: T[] = [];
+  const seen = new Set<number>();
+  for (const group of groups) {
+    for (const candidate of group) {
+      if (seen.has(candidate.item.id)) continue;
+      seen.add(candidate.item.id);
+      merged.push(candidate);
+    }
+  }
+  return merged;
+}
+
+const LEGACY_AFFINITY_KEYS: Partial<Record<SubjectId, string>> = {
+  startups: "tech",
+  markets: "business",
+  "us-politics": "politics",
+};
+
+/** Read old learned preferences until a canonical leaf affinity exists. */
+export function subjectAffinityWeight(affinityMap: AffinityMap, subjectId: SubjectId): number {
+  const canonical = affinityMap.get(affinityKey("topic", subjectId));
+  if (canonical) return Math.max(0, canonical.weight);
+  const legacyKey = LEGACY_AFFINITY_KEYS[subjectId];
+  const legacy = legacyKey ? affinityMap.get(affinityKey("topic", legacyKey)) : undefined;
+  return Math.max(0, legacy?.weight ?? 0);
+}
 
 /** Deliberately excludes `contentHtml`, the former multi-megabyte hot-path field. */
 const ITEM_SUMMARY_FIELDS = {
@@ -190,14 +244,29 @@ async function loadReadIds(profileId: string): Promise<Set<number>> {
 async function loadCandidateBundle(profile: Profile) {
   const db = getDb();
   const since = new Date(Date.now() - CANDIDATE_WINDOW_MS);
+  const selectedSubjects = resolveSelectedSubjects(profile.interests);
+  const seedInterests = selectedSubjects.map((subject) => subject.id);
+  const globalCandidates = db
+    .select({ item: ITEM_SUMMARY_FIELDS, source: sources })
+    .from(items)
+    .innerJoin(sources, eq(items.sourceId, sources.id))
+    .where(gte(items.publishedAt, since))
+    .orderBy(desc(items.publishedAt))
+    .limit(CANDIDATE_LIMIT);
+  const scopedCandidates = selectedSubjects.map((subject) => db
+    .select({ item: ITEM_SUMMARY_FIELDS, source: sources })
+    .from(items)
+    .innerJoin(sources, eq(items.sourceId, sources.id))
+    .where(and(
+      gte(items.publishedAt, since),
+      sql<boolean>`${items.topics} @> ${JSON.stringify([subject.id])}::jsonb`,
+    ))
+    .orderBy(desc(items.publishedAt))
+    .limit(SUBJECT_CANDIDATE_LIMIT));
+  const candidatePool = Promise.all([globalCandidates, ...scopedCandidates]).then((groups) => mergeCandidateGroups(groups));
+
   const [allCandidates, affinityMap, savedRows, readIds, mutedRows, activeSources] = await Promise.all([
-    db
-      .select({ item: ITEM_SUMMARY_FIELDS, source: sources })
-      .from(items)
-      .innerJoin(sources, eq(items.sourceId, sources.id))
-      .where(gte(items.publishedAt, since))
-      .orderBy(desc(items.publishedAt))
-      .limit(CANDIDATE_LIMIT),
+    candidatePool,
     loadAffinityMap(profile.id),
     db.select({ itemId: saves.itemId }).from(saves).where(eq(saves.profileId, profile.id)),
     loadReadIds(profile.id),
@@ -214,6 +283,8 @@ async function loadCandidateBundle(profile: Profile) {
     savedIds: new Set(savedRows.map((row) => row.itemId)),
     readIds,
     activeSources,
+    selectedSubjects,
+    seedInterests,
   };
 }
 
@@ -221,21 +292,20 @@ export async function loadTabCounts(): Promise<Record<string, number>> {
   const since = new Date(Date.now() - 6 * 3600_000);
   const rows = await getDb().select({ topics: items.topics }).from(items).where(gte(items.publishedAt, since));
   const counts: Record<string, number> = {};
-  for (const category of CATEGORIES) {
-    if (category.topics.length === 0) continue;
-    counts[category.slug] = Math.min(rows.filter((row) => row.topics.some((topic) => category.topics.includes(topic))).length, 99);
+  for (const subject of SUBJECTS) {
+    counts[subject.id] = Math.min(rows.filter((row) => row.topics.includes(subject.id)).length, 99);
   }
   return counts;
 }
 
 export async function loadFeed(profile: Profile, category?: Category): Promise<FeedData> {
-  const { candidates: allCandidates, affinityMap, savedIds, readIds } = await loadCandidateBundle(profile);
+  const { candidates: allCandidates, affinityMap, savedIds, readIds, seedInterests } = await loadCandidateBundle(profile);
   const topics = category?.topics ?? [];
   const candidates = topics.length === 0
     ? allCandidates
     : allCandidates.filter((candidate) => candidate.item.topics.some((topic) => topics.includes(topic)));
   const now = new Date();
-  const entries = rankFeed({ candidates, affinities: affinityMap, seedInterests: profile.interests, now, opts: { limit: FEED_LIMIT } });
+  const entries = rankFeed({ candidates, affinities: affinityMap, seedInterests, now, opts: { limit: FEED_LIMIT } });
   const latest = candidates
     .filter((candidate) => candidate.source.sourceClass === "social" && now.getTime() - candidate.item.publishedAt.getTime() < LATEST_WINDOW_MS)
     .sort((a, b) => b.item.publishedAt.getTime() - a.item.publishedAt.getTime())
@@ -312,13 +382,21 @@ function sourceFreshness(activeSources: Array<{ lastSuccessfulFetchAt: Date | nu
 }
 
 export async function loadBriefing(profile: Profile): Promise<BriefingPayload> {
-  const { candidates, affinityMap, savedIds, readIds, activeSources } = await loadCandidateBundle(profile);
+  const {
+    candidates,
+    affinityMap,
+    savedIds,
+    readIds,
+    activeSources,
+    selectedSubjects,
+    seedInterests,
+  } = await loadCandidateBundle(profile);
   const now = new Date();
   const newSince = profile.lastFeedOpenedAt ?? new Date(now.getTime() - FIRST_VISIT_NEW_WINDOW_MS);
   const ranked = rankFeed({
     candidates,
     affinities: affinityMap,
-    seedInterests: profile.interests,
+    seedInterests,
     now,
     opts: { limit: BRIEFING_ESSENTIAL_COUNT + BRIEFING_MORE_COUNT },
   }).map((entry) => toDTO(entry, savedIds, readIds, newSince));
@@ -327,16 +405,13 @@ export async function loadBriefing(profile: Profile): Promise<BriefingPayload> {
   const more = readingOrder.slice(BRIEFING_ESSENTIAL_COUNT);
   const visible = [...essential, ...more];
 
-  const worlds = CATEGORIES.slice(1).map((category) => {
-    const scopedCandidates = candidates.filter((candidate) => candidate.item.topics.some((topic) => category.topics.includes(topic)));
-    const scopedEntries = visible.filter((entry) => entry.topics.some((topic) => category.topics.includes(topic)));
-    const weight = category.topics.reduce((sum, topic) => {
-      const affinity = affinityMap.get(affinityKey("topic", topic));
-      return sum + Math.max(0, affinity?.weight ?? 0);
-    }, 0);
+  const worlds = selectedSubjects.map((subject) => {
+    const scopedCandidates = candidates.filter((candidate) => candidate.item.topics.includes(subject.id));
+    const scopedEntries = visible.filter((entry) => entry.topics.includes(subject.id));
+    const weight = subjectAffinityWeight(affinityMap, subject.id);
     return {
-      slug: category.slug,
-      label: category.label,
+      slug: subject.id,
+      label: subject.label,
       affinity: Math.tanh(weight / 6),
       activity: activityIndex(scopedCandidates.map((candidate) => ({ publishedAt: candidate.item.publishedAt })), now.getTime()),
       breaking: isBreaking(scopedEntries, now.getTime()),
@@ -364,7 +439,7 @@ export async function loadBriefing(profile: Profile): Promise<BriefingPayload> {
 export async function searchFeed(profile: Profile, query: string, limit = 20): Promise<FeedItemDTO[]> {
   const needle = query.trim().toLowerCase();
   if (needle.length < 2) return [];
-  const { candidates, affinityMap, savedIds, readIds } = await loadCandidateBundle(profile);
+  const { candidates, affinityMap, savedIds, readIds, seedInterests } = await loadCandidateBundle(profile);
   const matches = candidates.filter(({ item, source }) => [
     item.title,
     item.author ?? "",
@@ -375,35 +450,45 @@ export async function searchFeed(profile: Profile, query: string, limit = 20): P
   return rankFeed({
     candidates: matches,
     affinities: affinityMap,
-    seedInterests: profile.interests,
+    seedInterests,
     now,
     opts: { limit },
   }).map((entry) => toDTO(entry, savedIds, readIds));
 }
 
 export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
-  const { candidates, affinityMap, savedIds, readIds, activeSources } = await loadCandidateBundle(profile);
+  const {
+    candidates,
+    affinityMap,
+    savedIds,
+    readIds,
+    activeSources,
+    selectedSubjects,
+    seedInterests,
+  } = await loadCandidateBundle(profile);
   const now = new Date();
   const newSince = profile.lastFeedOpenedAt ?? new Date(now.getTime() - FIRST_VISIT_NEW_WINDOW_MS);
 
-  const buildWorld = (category: Category): WorldData => {
-    const scoped = category.topics.length === 0
+  const buildWorld = (scope: { slug: string; label: string; topics: readonly string[] }): WorldData => {
+    const scoped = scope.topics.length === 0
       ? candidates
-      : candidates.filter((candidate) => candidate.item.topics.some((topic) => category.topics.includes(topic)));
+      : candidates.filter((candidate) => candidate.item.topics.some((topic) => scope.topics.includes(topic)));
     const entries = rankFeed({
       candidates: scoped,
       affinities: affinityMap,
-      seedInterests: profile.interests,
+      seedInterests,
       now,
       opts: { limit: WORLD_ENTRY_LIMIT },
     }).map((entry) => toDTO(entry, savedIds, readIds, newSince));
-    const weight = category.topics.reduce((sum, topic) => {
+    const weight = scope.topics.reduce((sum, topic) => {
+      const subject = subjectById(topic);
+      if (subject) return sum + subjectAffinityWeight(affinityMap, subject.id);
       const entry = affinityMap.get(affinityKey("topic", topic));
       return sum + Math.max(0, entry?.weight ?? 0);
     }, 0);
     return {
-      slug: category.slug,
-      label: category.label,
+      slug: scope.slug,
+      label: scope.label,
       affinity: Math.tanh(weight / 6),
       activity: activityIndex(scoped.map((candidate) => ({ publishedAt: candidate.item.publishedAt })), now.getTime()),
       breaking: isBreaking(entries, now.getTime()),
@@ -412,10 +497,13 @@ export async function loadGalaxy(profile: Profile): Promise<GalaxyData> {
     };
   };
 
-  const [todayCategory, ...worldCategories] = CATEGORIES;
-  const todayFull = buildWorld(todayCategory);
+  const todayFull = buildWorld({ slug: "today", label: "Today", topics: [] });
   const today = { ...todayFull, entries: todayFull.entries.slice(0, 14) };
-  const worlds = worldCategories.map(buildWorld);
+  const worlds = selectedSubjects.map((subject) => buildWorld({
+    slug: subject.id,
+    label: subject.label,
+    topics: [subject.id],
+  }));
   const visible = [today, ...worlds].flatMap((world) => world.entries);
   const uniqueNew = new Map(visible.filter((entry) => entry.isNew && !entry.read).map((entry) => [entry.id, entry]));
   const updatedAt = candidates.length > 0

@@ -105,6 +105,7 @@ export const items = pgTable(
     index("items_published_at_idx").on(t.publishedAt),
     index("items_source_id_idx").on(t.sourceId),
     index("items_cluster_id_idx").on(t.clusterId),
+    index("items_topics_gin_idx").using("gin", t.topics),
   ],
 );
 

@@ -1,8 +1,6 @@
-/**
- * Navigation categories — the app's primary structure. Each tab groups one or
- * more classifier topics; "today" is the unfiltered ranked briefing.
- * Order here is tab order.
- */
+import { SUBJECTS, subjectById } from "./subjects";
+
+/** Compatibility shape for the remaining generic feed helpers. */
 export interface Category {
   slug: string;
   label: string;
@@ -14,18 +12,17 @@ export interface Category {
 
 export const CATEGORIES: Category[] = [
   { slug: "today", label: "Today", topics: [] },
-  { slug: "nba", label: "NBA", topics: ["nba"] },
-  { slug: "tech", label: "Tech / VC", shortLabel: "Tech", topics: ["tech", "ai", "vc"] },
-  { slug: "taiwan", label: "Taiwan", topics: ["taiwan"] },
-  { slug: "politics", label: "US Politics", shortLabel: "Politics", topics: ["us-politics"] },
-  { slug: "world", label: "World", topics: ["world", "business", "science", "media"] },
+  ...SUBJECTS.map((subject) => ({ slug: subject.id, label: subject.label, topics: [subject.id] })),
 ];
 
 export function categoryBySlug(slug: string): Category | undefined {
-  return CATEGORIES.find((c) => c.slug === slug);
+  if (slug === "today") return CATEGORIES[0];
+  const subject = subjectById(slug);
+  return subject ? { slug: subject.id, label: subject.label, topics: [subject.id] } : undefined;
 }
 
-/** Which tab an item's topics belong to (first match in tab order wins). */
+/** Resolve the first precise leaf topic, with hidden legacy alias fallback. */
 export function categoryForTopics(topics: string[]): Category | undefined {
-  return CATEGORIES.slice(1).find((c) => c.topics.some((t) => topics.includes(t)));
+  const subject = topics.map(subjectById).find(Boolean);
+  return subject ? { slug: subject.id, label: subject.label, topics: [subject.id] } : undefined;
 }

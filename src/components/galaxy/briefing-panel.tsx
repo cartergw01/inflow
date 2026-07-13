@@ -2,12 +2,10 @@
 
 import { useMemo, useState } from "react";
 import type { BriefingPayload, GalaxyStoryDTO } from "../../lib/feed-data";
-import { categoryForTopics } from "../../lib/categories";
 import { timeAgo, topicLabel } from "../../lib/format";
 import { sendSignal } from "../../lib/signals-client";
-import { VISUALS_BY_SLUG, WORLD_VISUALS } from "../../galaxy/worlds";
-
-const INTRO_KEY = "inflow-briefing-intro-seen";
+import { VISUALS_BY_SLUG } from "../../galaxy/worlds";
+import { subjectById } from "../../lib/subjects";
 
 function SaveIcon({ saved }: { saved: boolean }) {
   return (
@@ -38,8 +36,8 @@ function BriefingStoryRow({ story, index, featured, onOpen, onSaveChange }: {
   onSaveChange: (saved: boolean) => void;
 }) {
   const [saved, setSaved] = useState(story.saved);
-  const category = categoryForTopics(story.topics);
-  const visual = category ? VISUALS_BY_SLUG.get(category.slug) : undefined;
+  const subject = story.topics.map(subjectById).find(Boolean);
+  const visual = subject ? VISUALS_BY_SLUG.get(subject.id) : undefined;
 
   return (
     <article className="briefing-story" data-read={story.read} data-featured={featured}>
@@ -52,7 +50,7 @@ function BriefingStoryRow({ story, index, featured, onOpen, onSaveChange }: {
           <span>{story.sourceName}</span>
           <span>{timeAgo(story.publishedAt)} ago</span>
           {story.readingMinutes ? <span>{story.readingMinutes} min</span> : null}
-          <span>{category?.label ?? (story.topics[0] ? topicLabel(story.topics[0]) : "News")}</span>
+          <span>{subject?.label ?? (story.topics[0] ? topicLabel(story.topics[0]) : "News")}</span>
         </span>
         <span className="briefing-story__trust" data-status={story.status} data-verification={story.verificationStatus}>{trustLabel(story)}</span>
       </button>
@@ -65,40 +63,6 @@ function BriefingStoryRow({ story, index, featured, onOpen, onSaveChange }: {
   );
 }
 
-function BriefingIntro({ onDone }: { onDone: () => void }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-  const choose = (slug: string) => setSelected((current) => {
-    const next = new Set(current);
-    if (next.has(slug)) next.delete(slug); else next.add(slug);
-    return next;
-  });
-  const finish = async (save: boolean) => {
-    setBusy(true);
-    if (save && selected.size > 0) {
-      const interests = WORLD_VISUALS.filter((world) => selected.has(world.slug)).flatMap((world) => {
-        if (world.slug === "politics") return ["us-politics"];
-        if (world.slug === "tech") return ["tech", "ai", "vc"];
-        return [world.slug];
-      });
-      await fetch("/api/profile", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ interests }) }).catch(() => undefined);
-    }
-    try { localStorage.setItem(INTRO_KEY, "1"); } catch { /* optional persistence */ }
-    setBusy(false);
-    onDone();
-  };
-
-  return (
-    <section className="briefing-intro" aria-labelledby="briefing-intro-title">
-      <div><h2 id="briefing-intro-title">Make this briefing yours.</h2><p>Choose a few worlds, or skip—InFlow learns from what you read.</p></div>
-      <div className="briefing-intro__worlds">
-        {WORLD_VISUALS.filter((world) => world.slug !== "today").map((world) => <button key={world.slug} type="button" aria-pressed={selected.has(world.slug)} onClick={() => choose(world.slug)}><span style={{ background: world.css }} aria-hidden />{world.label}</button>)}
-      </div>
-      <div className="briefing-intro__actions"><button type="button" onClick={() => finish(false)}>Skip</button><button type="button" disabled={busy || selected.size === 0} onClick={() => finish(true)}>{busy ? "Saving…" : "Use these worlds"}</button></div>
-    </section>
-  );
-}
-
 export function BriefingPanel({ payload, onOpen, onOpenUniverse, onSelectWorld, onSaveChange }: {
   payload: BriefingPayload;
   onOpen: (story: GalaxyStoryDTO) => void;
@@ -107,9 +71,6 @@ export function BriefingPanel({ payload, onOpen, onOpenUniverse, onSelectWorld, 
   onSaveChange: (storyId: number, saved: boolean) => void;
 }) {
   const [showMore, setShowMore] = useState(false);
-  const [showIntro, setShowIntro] = useState(() => {
-    try { return localStorage.getItem(INTRO_KEY) !== "1"; } catch { return false; }
-  });
   const essentials = useMemo(() => payload.essentialIds.flatMap((id) => payload.stories[String(id)] ? [payload.stories[String(id)]] : []), [payload]);
   const more = useMemo(() => payload.moreIds.flatMap((id) => payload.stories[String(id)] ? [payload.stories[String(id)]] : []), [payload]);
   const readCount = essentials.filter((story) => story.read).length;
@@ -118,7 +79,6 @@ export function BriefingPanel({ payload, onOpen, onOpenUniverse, onSelectWorld, 
   return (
     <aside className="briefing-panel" aria-label="Your briefing">
       <div className="briefing-panel__scroll">
-        {showIntro ? <BriefingIntro onDone={() => setShowIntro(false)} /> : null}
         <header className="briefing-panel__header">
           <h1>Your briefing</h1>
           <p>{essentials.length} essentials selected from {payload.newCount} new {payload.newCount === 1 ? "story" : "stories"}</p>

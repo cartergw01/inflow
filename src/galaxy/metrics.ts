@@ -1,5 +1,3 @@
-import { CATEGORIES } from "../lib/categories";
-
 /**
  * The v2 visual grammar's quantitative layer — every number that drives a
  * visual channel is computed here, pure and tested, so the scene can't drift
@@ -106,24 +104,29 @@ export function computeBridges(
   worlds: { slug: string; entries: MetricStory[] }[],
   max = 5,
 ): Bridge[] {
-  const topicToSlug = new Map<string, string>();
-  for (const cat of CATEGORIES) {
-    if (cat.topics.length === 0) continue;
-    for (const t of cat.topics) topicToSlug.set(t, cat.slug);
-  }
-
-  const seen = new Map<number, Bridge>();
+  const appearances = new Map<number, {
+    story: MetricStory;
+    worlds: Array<{ slug: string; rank: number }>;
+  }>();
   for (const world of worlds) {
     world.entries.forEach((story, rank) => {
-      const slugs = [...new Set(story.topics.map((t) => topicToSlug.get(t)).filter((s): s is string => !!s))];
-      if (slugs.length < 2) return;
-      const existing = seen.get(story.id);
-      if (existing) {
-        existing.rank = Math.min(existing.rank, rank);
-        return;
+      const appearance = appearances.get(story.id) ?? { story, worlds: [] };
+      if (!appearance.worlds.some((candidate) => candidate.slug === world.slug)) {
+        appearance.worlds.push({ slug: world.slug, rank });
       }
-      seen.set(story.id, { storyId: story.id, title: story.title, a: slugs[0], b: slugs[1], rank });
+      appearances.set(story.id, appearance);
     });
   }
-  return [...seen.values()].sort((x, y) => x.rank - y.rank).slice(0, max);
+
+  return [...appearances.values()]
+    .filter((appearance) => appearance.worlds.length >= 2)
+    .map(({ story, worlds: memberships }) => ({
+      storyId: story.id,
+      title: story.title,
+      a: memberships[0].slug,
+      b: memberships[1].slug,
+      rank: Math.min(...memberships.map((membership) => membership.rank)),
+    }))
+    .sort((a, b) => a.rank - b.rank || a.storyId - b.storyId)
+    .slice(0, max);
 }

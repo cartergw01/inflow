@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WORLD_VISUALS, seeded, worldPosition } from "../worlds";
+import { SUBJECTS } from "../../lib/subjects";
 
 describe("world layouts", () => {
   it("are deterministic — same story id always lands in the same place", () => {
@@ -10,12 +11,11 @@ describe("world layouts", () => {
     }
   });
 
-  it("give distinct worlds distinct formations for the same inputs", () => {
-    const shapes = WORLD_VISUALS.map((w) => {
-      const p = w.layout(3, 999);
-      return `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}`;
-    });
-    expect(new Set(shapes).size).toBe(WORLD_VISUALS.length);
+  it("provides one visual for every canonical subject and all family cores", () => {
+    expect(WORLD_VISUALS.slice(1).map((world) => world.slug)).toEqual(SUBJECTS.map((subject) => subject.id));
+    expect(new Set(WORLD_VISUALS.map((world) => world.core))).toEqual(new Set([
+      "sun", "arena", "lattice", "isle", "rotunda", "globe", "exchange", "constellation", "atom",
+    ]));
   });
 
   it("keeps stories clear of the core (no z-fighting with world geometry)", () => {
@@ -44,5 +44,19 @@ describe("world layouts", () => {
     const warm = worldPosition(w, 1);
     const dist = (p: { x: number; y: number; z: number }) => Math.hypot(p.x, p.y, p.z);
     expect(dist(warm)).toBeLessThan(dist(cold));
+  });
+
+  it("spaces one-to-five selected worlds evenly and deterministically", () => {
+    const selected = WORLD_VISUALS.slice(1, 6);
+    const bearings = selected.map((world, index) => {
+      const position = worldPosition(world, 0, index, selected.length);
+      return Math.atan2(position.z, position.x);
+    });
+    const gaps = bearings.map((bearing, index) => {
+      const next = bearings[(index + 1) % bearings.length];
+      return (next - bearing + Math.PI * 2) % (Math.PI * 2);
+    });
+    gaps.forEach((gap) => expect(gap).toBeCloseTo((Math.PI * 2) / selected.length, 8));
+    expect(worldPosition(selected[2], 0.4, 2, selected.length)).toEqual(worldPosition(selected[2], 0.4, 2, selected.length));
   });
 });

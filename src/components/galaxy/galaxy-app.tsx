@@ -134,6 +134,10 @@ export function GalaxyApp({
     const loadUniverse = async () => {
       try {
         const [response, engineModule] = await Promise.all([fetch("/api/galaxy"), import("../../galaxy/engine")]);
+        if (response.status === 401) {
+          location.replace(`/welcome?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+          return;
+        }
         if (!response.ok) throw new Error(`galaxy ${response.status}`);
         const payload = engineModule.hydrateGalaxyPayload(await response.json() as GalaxyWirePayload);
         if (cancelled || !canvasRef.current) return;
@@ -196,6 +200,10 @@ export function GalaxyApp({
     (async () => {
       try {
         const response = await fetch("/api/briefing");
+        if (response.status === 401) {
+          location.replace(`/welcome?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+          return;
+        }
         if (!response.ok) throw new Error(`briefing ${response.status}`);
         if (!cancelled) {
           setBriefing(await response.json() as BriefingPayload);
@@ -429,9 +437,10 @@ export function GalaxyApp({
       {showHint && mode === "universe" ? <div className="galaxy-control-hint" role="status"><span>Drag to move · scroll or pinch to zoom · choose any story from the rail</span><button type="button" onClick={dismissHint}>Got it</button></div> : null}
       <div className="dive-cover" data-active={diving} aria-hidden />
 
-      {searchOpen ? <WarpBar stories={searchIndex} onWarp={(target: WarpTarget) => {
+      {searchOpen ? <WarpBar stories={searchIndex} worlds={data?.worlds ?? briefing?.worlds ?? []} onWarp={(target: WarpTarget) => {
         setSearchOpen(false);
-        if (target.kind === "world") openUniverse(String(target.id));
+        if (target.kind === "world" && target.id === "today") openToday();
+        else if (target.kind === "world") openUniverse(String(target.id));
         else void openReaderById(Number(target.id));
       }} onClose={() => setSearchOpen(false)} /> : null}
 

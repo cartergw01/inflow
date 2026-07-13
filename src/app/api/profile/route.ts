@@ -1,38 +1,63 @@
 import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { profiles } from "../../../db/schema";
-import { getProfileId, PROFILE_COOKIE } from "../../../lib/profile";
-import { eq } from "drizzle-orm";
-
-const KNOWN_TOPICS = new Set([
-  "nba", "tech", "ai", "vc", "taiwan", "us-politics", "world", "business", "science", "media",
-]);
+import {
+  getProfileId,
+  setProfileCookie,
+  validateProfileInterests,
+} from "../../../lib/profile";
 
 /** Creates or tunes the anonymous profile without adding an authentication gate. */
 export async function POST(req: NextRequest) {
-  let interests: string[] = [];
+  let body: unknown;
   try {
-    const body = (await req.json()) as { interests?: unknown };
-    if (Array.isArray(body.interests)) {
-      interests = body.interests.filter((t): t is string => typeof t === "string" && KNOWN_TOPICS.has(t)).slice(0, 10);
-    }
+    body = await req.json();
   } catch {
-    // empty body → empty interests; the feed still works, just colder start
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "invalid_json",
+          message: "Request body must contain valid JSON.",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  const validation = validateProfileInterests(body);
+  if (!validation.ok) {
+    return NextResponse.json(
+      { ok: false, error: validation.error },
+      { status: validation.status },
+    );
   }
 
   const db = getDb();
   const existingId = await getProfileId();
-  const [profile] = existingId
-    ? await db.update(profiles).set({ interests }).where(eq(profiles.id, existingId)).returning()
-    : await db.insert(profiles).values({ interests }).returning();
+  let profile = existingId
+    ? (await db
+        .update(profiles)
+        .set({ interests: validation.interests })
+        .where(eq(profiles.id, existingId))
+        .returning())[0]
+    : undefined;
+  const created = !profile;
 
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set(PROFILE_COOKIE, profile.id, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 365,
-    path: "/",
-  });
+  // A syntactically valid cookie can outlive its database row. Treat that as
+  // a new anonymous visitor and replace the stale cookie with the new row ID.
+  if (!profile) {
+    [profile] = await db
+      .insert(profiles)
+      .values({ interests: validation.interests })
+      .returning();
+  }
+
+  const res = NextResponse.json(
+    { ok: true, interests: validation.interests },
+    { status: created ? 201 : 200 },
+  );
+  setProfileCookie(res, profile.id);
   return res;
 }

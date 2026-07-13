@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { WORLD_VISUALS } from "../../galaxy/worlds";
-import { categoryForTopics } from "../../lib/categories";
+import { VISUALS_BY_SLUG } from "../../galaxy/worlds";
+import { subjectById } from "../../lib/subjects";
 import type { FeedItemDTO } from "../../lib/feed-data";
 
 export interface WarpTarget {
@@ -22,8 +22,9 @@ function CloseIcon() {
   return <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden><path d="m5 5 10 10M15 5 5 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>;
 }
 
-export function WarpBar({ stories, onWarp, onClose }: {
+export function WarpBar({ stories, worlds, onWarp, onClose }: {
   stories: { id: number; title: string; world: string; sourceName: string }[];
+  worlds: Array<{ slug: string; label: string }>;
   onWarp: (target: WarpTarget) => void;
   onClose: () => void;
 }) {
@@ -52,18 +53,20 @@ export function WarpBar({ stories, onWarp, onClose }: {
 
   const worldResults = useMemo<WarpTarget[]>(() => {
     const needle = query.trim().toLowerCase();
-    return WORLD_VISUALS.filter((world) => !needle || world.label.toLowerCase().includes(needle) || world.slug.includes(needle))
-      .map((world) => ({ kind: "world", id: world.slug, title: world.label, sub: "WORLD", color: world.css }));
-  }, [query]);
+    return [{ slug: "today", label: "Today" }, ...worlds]
+      .filter((world) => !needle || world.label.toLowerCase().includes(needle) || world.slug.includes(needle))
+      .map((world) => ({ kind: "world", id: world.slug, title: world.label, sub: "WORLD", color: VISUALS_BY_SLUG.get(world.slug)?.css ?? "#8ba2ff" }));
+  }, [query, worlds]);
 
   const storyResults = useMemo<WarpTarget[]>(() => {
     if (query.trim().length >= 2) return remoteStories.map((story) => {
-      const category = categoryForTopics(story.topics);
-      const visual = WORLD_VISUALS.find((world) => world.slug === category?.slug);
-      return { kind: "story", id: story.id, title: story.title, sub: `${story.sourceName} · ${category?.label ?? "NEWS"}`, color: visual?.css ?? "#8ba2ff", saved: story.saved };
+      const matchedWorld = worlds.find((world) => story.topics.includes(world.slug));
+      const subject = matchedWorld ? subjectById(matchedWorld.slug) : story.topics.map(subjectById).find(Boolean);
+      const slug = matchedWorld?.slug ?? subject?.id;
+      return { kind: "story", id: story.id, title: story.title, sub: `${story.sourceName} · ${matchedWorld?.label ?? subject?.label ?? "NEWS"}`, color: slug ? VISUALS_BY_SLUG.get(slug)?.css ?? "#8ba2ff" : "#8ba2ff", saved: story.saved };
     });
-    return stories.slice(0, 6).map((story) => ({ kind: "story", id: story.id, title: story.title, sub: `${story.sourceName} · RECENT`, color: WORLD_VISUALS.find((world) => world.slug === story.world)?.css ?? "#8ba2ff" }));
-  }, [query, remoteStories, stories]);
+    return stories.slice(0, 6).map((story) => ({ kind: "story", id: story.id, title: story.title, sub: `${story.sourceName} · RECENT`, color: VISUALS_BY_SLUG.get(story.world)?.css ?? "#8ba2ff" }));
+  }, [query, remoteStories, stories, worlds]);
   const savedResults = storyResults.filter((result) => result.saved);
   const regularResults = storyResults.filter((result) => !result.saved);
   const results = [...worldResults, ...savedResults, ...regularResults];

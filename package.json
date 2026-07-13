@@ -11,7 +11,11 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "sources:preflight": "tsx scripts/preflight-sources.ts",
+    "topics:sources-preflight": "tsx scripts/preflight-sources.ts",
+    "topics:reclassify": "tsx scripts/reclassify-recent.ts",
+    "qa:onboarding": "node scripts/qa-onboarding.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.3",
@@ -37,6 +41,7 @@
     "eslint-config-next": "16.2.10",
     "puppeteer-core": "^25.3.0",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^4.1.9"
   }

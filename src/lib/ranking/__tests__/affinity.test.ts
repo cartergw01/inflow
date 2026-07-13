@@ -108,5 +108,7 @@ describe("applySignal", () => {
     const next = applySignal(new Map(), { type: "open", value: 1 }, item, nbaSource, NOW);
 
     expect([...next.keys()].filter((k) => k.startsWith("author:"))).toHaveLength(0);
+    expect(next.has("topic:startups")).toBe(true);
+    expect(next.has("topic:tech")).toBe(false);
   });
 });

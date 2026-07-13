@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fullDate, timeAgo, topicLabel } from "../../lib/format";
+import type { ReaderContentStatus } from "../../lib/reader-content";
 import { sendSignal } from "../../lib/signals-client";
 import { readerSwipeDirection, restoreReaderFocus } from "./reader-navigation";
 
@@ -20,6 +21,8 @@ export interface ReaderPayload {
   correctionNote: string | null;
   topics: string[];
   contentHtml: string | null;
+  contentStatus: ReaderContentStatus;
+  readingMinutes: number | null;
   excerpt: string | null;
   url: string;
   saved: boolean;
@@ -206,10 +209,10 @@ export function ReaderOverlay({ item, accent, contextLabel = "Today", queueLabel
           <div className="reader-article__byline">
             <div>{item.sourceHomepageUrl ? <a href={item.sourceHomepageUrl} target="_blank" rel="noopener noreferrer"><span>{item.sourceName}</span></a> : <span>{item.sourceName}</span>}{item.author ? <> · {item.author}</> : null}</div>
             <div>{fullDate(item.publishedAt)} · {timeAgo(item.publishedAt)} ago{item.sourceCheckedAt ? <> · Feed checked {timeAgo(item.sourceCheckedAt)} ago</> : null}</div>
-            <small>{item.verificationStatus === "corroborated" ? "Corroborated reporting" : item.verificationStatus === "unconfirmed" ? "Unconfirmed social report" : `${item.credibilityTier} source`}</small>
+            <small>{item.verificationStatus === "corroborated" ? "Corroborated reporting" : item.verificationStatus === "unconfirmed" ? "Unconfirmed social report" : `${item.credibilityTier} source`} · {item.contentStatus === "full" ? `Read in InFlow${item.readingMinutes ? ` · ${item.readingMinutes} min` : ""}` : item.contentStatus === "partial" ? "Publisher excerpt" : "Reader unavailable"}</small>
           </div>
         </header>
-        {item.contentHtml ? <div className="reader-body reader-body-system" dangerouslySetInnerHTML={{ __html: item.contentHtml }} /> : <div className="reader-article__fallback">{item.excerpt ? <p>{item.excerpt}</p> : <p>This publisher did not make the story text available to InFlow.</p>}<a href={item.url} target="_blank" rel="noopener noreferrer" onClick={() => sendSignal({ itemId: item.id, type: "open" })} style={{ background: accent }}>Continue at {item.sourceName} <span aria-hidden>↗</span></a></div>}
+        {item.contentHtml ? <div className="reader-body reader-body-system" dangerouslySetInnerHTML={{ __html: item.contentHtml }} /> : <div className="reader-article__fallback" role="status"><strong>Reader view isn’t available for this story.</strong>{item.excerpt ? <p>{item.excerpt}</p> : <p>{item.sourceName} did not expose readable article text to InFlow.</p>}<small>Some publishers block public reader access. The original remains available as a secondary option.</small><a href={item.url} target="_blank" rel="noopener noreferrer" onClick={() => sendSignal({ itemId: item.id, type: "open" })}>Open original at {item.sourceName} <span aria-hidden>↗</span></a></div>}
         <footer className="reader-feedback">
           {next ? <button type="button" className="reader-next" disabled={pending} onClick={onNext}><span>Next in {queueLabel}</span><strong>{next.title} →</strong></button> : null}
           {onExplore ? <button type="button" className="reader-explore" onClick={onExplore}>Explore this story in the universe</button> : null}

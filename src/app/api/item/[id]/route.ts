@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadReaderItem } from "../../../../lib/feed-data";
 import { stripHtml } from "../../../../lib/ingest/normalize";
 import { getProfileId } from "../../../../lib/profile";
+import { resolveReaderContent } from "../../../../lib/reader-content";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 15;
 
 /**
  * Article payload for the in-galaxy reader overlay. The 3D scene stays
  * mounted; the overlay fetches content instead of navigating away.
- * contentHtml was sanitized at ingest (see normalize.ts).
+ * Short or missing feed bodies are upgraded from the public publisher page,
+ * sanitized, and cached before this response is returned.
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,10 +23,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const { item, source, saved } = row;
+  const reader = await resolveReaderContent(item, source.sourceClass);
   return NextResponse.json({
     id: item.id,
     title: stripHtml(item.title),
-    author: item.author,
+    author: reader.author,
     sourceName: source.name,
     sourceHomepageUrl: source.homepageUrl,
     credibilityTier: source.credibilityTier,
@@ -34,9 +38,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     verificationStatus: item.verificationStatus,
     correctionNote: item.correctionNote,
     topics: item.topics,
-    contentHtml: item.contentHtml,
-    excerpt: item.excerpt,
+    contentHtml: reader.contentHtml,
+    contentStatus: reader.contentStatus,
+    readingMinutes: reader.readingMinutes,
+    excerpt: reader.excerpt,
     url: item.url,
     saved,
-  });
+  }, { headers: { "cache-control": "private, no-store" } });
 }

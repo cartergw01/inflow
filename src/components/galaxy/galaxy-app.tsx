@@ -90,6 +90,9 @@ export function GalaxyApp({
       .then((response) => response.ok ? response.json() as Promise<ReaderPayload> : null)
       .catch(() => null);
     readerCache.current.set(itemId, request);
+    void request.then((result) => {
+      if (!result) readerCache.current.delete(itemId);
+    });
     return request;
   }, []);
 
@@ -276,7 +279,7 @@ export function GalaxyApp({
     readerRestoresFocus.current = false;
   }, [mode, reading]);
 
-  const openReaderById = useCallback(async (storyId: number, storyUrl?: string, replaceHistory = false, restoreFocus = false) => {
+  const openReaderById = useCallback(async (storyId: number, replaceHistory = false, restoreFocus = false) => {
     if (readerNavigationLock.current) return;
     readerNavigationLock.current = true;
     const sequential = Boolean(reading);
@@ -298,7 +301,10 @@ export function GalaxyApp({
         const state = { inflowReader: true, itemId: storyId, returnPath };
         if (replaceHistory || sequential) history.replaceState(state, "", `/item/${storyId}`);
         else if (!location.pathname.startsWith("/item/")) history.pushState(state, "", `/item/${storyId}`);
-      } else if (storyUrl) open(storyUrl, "_blank", "noopener");
+      } else {
+        setToast("Reader couldn’t load — try again");
+        setTimeout(() => setToast(null), 2800);
+      }
     } finally {
       setDiving(false);
       setReaderPending(false);
@@ -307,7 +313,7 @@ export function GalaxyApp({
   }, [fetchReader, markStoryRead, mode, pathForContext, reading]);
 
   const openReader = useCallback((story: GalaxyStory | GalaxyStoryDTO | FeedItemDTO, restoreFocus = false) => {
-    void openReaderById(story.id, story.url, false, restoreFocus);
+    void openReaderById(story.id, false, restoreFocus);
   }, [openReaderById]);
 
   useEffect(() => {
@@ -453,6 +459,8 @@ export function GalaxyApp({
       {toast ? <div className="galaxy-toast" role="status">{toast}</div> : null}
       </div>
 
+      {readerPending && !reading ? <div className="reader-loading" role="status" aria-live="polite"><span aria-hidden /><strong>Preparing reader…</strong><small>Bringing the story into InFlow</small></div> : null}
+
       {reading ? <ReaderOverlay key={reading.id}
         item={reading}
         accent={accent}
@@ -463,8 +471,8 @@ export function GalaxyApp({
         previous={readerNeighbors.previous}
         next={readerNeighbors.next}
         pending={readerPending}
-        onPrevious={() => readerNeighbors.previous && void openReaderById(readerNeighbors.previous.id, undefined, true)}
-        onNext={() => readerNeighbors.next && void openReaderById(readerNeighbors.next.id, undefined, true)}
+        onPrevious={() => readerNeighbors.previous && void openReaderById(readerNeighbors.previous.id, true)}
+        onNext={() => readerNeighbors.next && void openReaderById(readerNeighbors.next.id, true)}
         onExplore={() => { finishReaderClose(0); setTimeout(() => openUniverse(view), 0); }}
         onClose={finishReaderClose}
         onSaveChange={(saved) => setStorySaved(reading.id, saved)}

@@ -3,7 +3,9 @@ import { StandaloneReader } from "../../../components/standalone-reader";
 import { loadItem, loadReaderItem } from "../../../lib/feed-data";
 import { stripHtml } from "../../../lib/ingest/normalize";
 import { getProfileId } from "../../../lib/profile";
+import { resolveReaderContent } from "../../../lib/reader-content";
 export const dynamic = "force-dynamic";
+export const maxDuration = 15;
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const row = await loadItem(Number(id));
@@ -16,10 +18,11 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
   const row = await loadReaderItem(itemId, await getProfileId());
   if (!row) notFound();
   const { item, source, saved } = row;
+  const reader = await resolveReaderContent(item, source.sourceClass);
   return <StandaloneReader item={{
     id: item.id,
     title: stripHtml(item.title),
-    author: item.author,
+    author: reader.author,
     sourceName: source.name,
     sourceHomepageUrl: source.homepageUrl,
     credibilityTier: source.credibilityTier,
@@ -30,8 +33,10 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
     verificationStatus: item.verificationStatus,
     correctionNote: item.correctionNote,
     topics: item.topics,
-    contentHtml: item.contentHtml,
-    excerpt: item.excerpt,
+    contentHtml: reader.contentHtml,
+    contentStatus: reader.contentStatus,
+    readingMinutes: reader.readingMinutes,
+    excerpt: reader.excerpt,
     url: item.url,
     saved,
   }} />;

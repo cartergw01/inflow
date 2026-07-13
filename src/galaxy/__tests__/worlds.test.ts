@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { WORLD_VISUALS, seeded, worldPosition } from "../worlds";
 import { SUBJECTS } from "../../lib/subjects";
@@ -16,6 +18,13 @@ describe("world layouts", () => {
     expect(new Set(WORLD_VISUALS.map((world) => world.core))).toEqual(new Set([
       "sun", "arena", "lattice", "isle", "rotunda", "globe", "exchange", "constellation", "atom",
     ]));
+  });
+
+  it("provides a generated portrait asset for every topic world", () => {
+    for (const world of WORLD_VISUALS.slice(1)) {
+      expect(world.portrait).toBe(`/galaxy/worlds/${world.slug}.webp`);
+      expect(existsSync(join(process.cwd(), "public", world.portrait!))).toBe(true);
+    }
   });
 
   it("keeps stories clear of the core (no z-fighting with world geometry)", () => {

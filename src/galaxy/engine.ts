@@ -364,7 +364,9 @@ export class GalaxyEngine {
     }
   }
 
-  private buildCore(visual: WorldVisual, group: THREE.Group, scale: number, breaking: boolean) {
+  private buildCore(visual: WorldVisual, worldGroup: THREE.Group, scale: number, breaking: boolean) {
+    const group = new THREE.Group();
+    worldGroup.add(group);
     const mk = (geo: THREE.BufferGeometry, color: number, opacity = 1) => {
       const m = new THREE.Mesh(
         geo,
@@ -692,16 +694,60 @@ export class GalaxyEngine {
       const ring = thinRing(lane.r * scale - 0.025, lane.r * scale + 0.025, visual.color, 0.13);
       ring.rotation.x = Math.PI / 2 - lane.tiltX;
       if (lane.tiltZ) ring.rotation.z = lane.tiltZ;
-      group.add(ring);
+      worldGroup.add(ring);
     }
 
     // breaking pulse ring (animated in the loop) — the only ambient motion
     if (breaking && visual.core !== "sun") {
       const pulse = thinRing(2.2 * scale, 2.32 * scale, visual.color, 0.55);
       pulse.rotation.x = Math.PI / 2;
-      group.add(pulse);
+      worldGroup.add(pulse);
       this.pulses.push({ ring: pulse, halo: null, phase: Math.random() * Math.PI * 2, scale });
     }
+
+    return group;
+  }
+
+  private buildPortrait(visual: WorldVisual, worldGroup: THREE.Group, fallbackCore: THREE.Group, scale: number) {
+    if (!visual.portrait) return;
+
+    const material = new THREE.SpriteMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    });
+    material.toneMapped = false;
+
+    const sprite = new THREE.Sprite(material);
+    sprite.visible = false;
+    sprite.scale.setScalar(8.4 * scale);
+    sprite.renderOrder = 1;
+    worldGroup.add(sprite);
+
+    const texture = new THREE.TextureLoader().load(
+      visual.portrait,
+      (loaded) => {
+        if (this.disposed) {
+          loaded.dispose();
+          return;
+        }
+        sprite.visible = true;
+        fallbackCore.visible = false;
+      },
+      undefined,
+      () => {
+        sprite.visible = false;
+      },
+    );
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    material.map = texture;
+    material.needsUpdate = true;
   }
 
   private buildWorld(world: GalaxyWorldData, visual: WorldVisual, index: number, worldCount: number) {
@@ -715,7 +761,8 @@ export class GalaxyEngine {
     this.worldGroups.set(world.slug, group);
     this.byWorldIndex.set(world.slug, world.entries);
 
-    this.buildCore(visual, group, scale, world.breaking);
+    const fallbackCore = this.buildCore(visual, group, scale, world.breaking);
+    this.buildPortrait(visual, group, fallbackCore, scale);
 
     const hit = new THREE.Mesh(new THREE.SphereGeometry(6.5 * Math.max(scale, 0.8), 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
     hit.userData.world = world.slug;
@@ -1569,6 +1616,17 @@ export class GalaxyEngine {
     this.disposed = true;
     this.resizeObserver.disconnect();
     removeEventListener("resize", this.onResize);
+    this.scene.traverse((object) => {
+      const renderable = object as THREE.Mesh;
+      renderable.geometry?.dispose();
+      const materials = Array.isArray(renderable.material) ? renderable.material : renderable.material ? [renderable.material] : [];
+      for (const material of materials) {
+        for (const value of Object.values(material)) {
+          if (value instanceof THREE.Texture) value.dispose();
+        }
+        material.dispose();
+      }
+    });
     this.renderer.dispose();
   }
 }

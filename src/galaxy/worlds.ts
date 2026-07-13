@@ -33,6 +33,8 @@ export interface WorldVisual {
   altColor: number;
   /** CSS color strings for HUD elements. */
   css: string;
+  /** Generated editorial portrait used as the world's luminous visual core. */
+  portrait: string | null;
   /** Core construction: which builder the engine uses. */
   core: "sun" | "arena" | "lattice" | "isle" | "rotunda" | "globe" | "exchange" | "constellation" | "atom";
   /** Fixed bearing on the galactic plane (radians) — a stable mental map. */
@@ -61,6 +63,7 @@ const todayVisual: WorldVisual = {
   color: 0xd9c26a,
   altColor: 0xf0e2b0,
   css: "#d9c26a",
+  portrait: null,
   core: "sun",
   angle: 0,
   lanes: [{ r: 4.4, tiltX: 0 }, { r: 6.2, tiltX: 0 }],
@@ -175,7 +178,18 @@ function visualForSubject(subject: Subject, index: number): WorldVisual {
   if (subject.id === "taiwan") { core = "isle"; layout = islandLayout; lanes = [{ r: 4.2, tiltX: 0.18 }]; }
   if (subject.id === "us-politics") { core = "rotunda"; layout = chamberLayout; lanes = [{ r: 4.4, tiltX: 0 }, { r: 6, tiltX: 0 }]; }
 
-  return { slug: subject.id, label: subject.label, color, altColor, css, core, angle: -Math.PI / 2 + (index / SUBJECTS.length) * TAU, lanes, layout };
+  return {
+    slug: subject.id,
+    label: subject.label,
+    color,
+    altColor,
+    css,
+    portrait: `/galaxy/worlds/${subject.id}.webp`,
+    core,
+    angle: -Math.PI / 2 + (index / SUBJECTS.length) * TAU,
+    lanes,
+    layout,
+  };
 }
 
 export const WORLD_VISUALS: WorldVisual[] = [todayVisual, ...SUBJECTS.map(visualForSubject)];

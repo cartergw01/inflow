@@ -389,6 +389,11 @@ export function GalaxyApp({
   const accent = view ? VISUALS_BY_SLUG.get(view)?.css ?? "#8ba2ff" : "#8ba2ff";
   const visibleLabels = mode === "universe" ? labels.filter((label) => label.kind === "world" || label.kind === "story") : [];
   const freshness = briefing?.freshness ?? data?.freshness;
+  const sourceStatus = freshness?.staleSourceCount
+    ? `${freshness.staleSourceCount} sources delayed`
+    : freshness?.latestCheckedAt
+      ? `Sources checked ${timeAgo(freshness.latestCheckedAt)} ago`
+      : "Checking sources";
 
   return (
     <div className="observatory-shell fixed inset-0 bg-[#04040a] text-white overflow-hidden" data-mode={mode} data-view={view ?? "overview"}>
@@ -408,14 +413,14 @@ export function GalaxyApp({
       <header className="inflow-shell-header">
         <button type="button" className="galaxy-brand" onClick={openToday}><span style={{ background: accent }} aria-hidden /><strong>INFLOW</strong></button>
         <nav className="inflow-mode-switch" aria-label="News view">
-          <button type="button" aria-current={mode === "today" ? "page" : undefined} onClick={openToday}><BriefingIcon /><span><strong>Today</strong><small>Briefing</small></span></button>
-          <button type="button" aria-current={mode === "universe" ? "page" : undefined} onClick={() => openUniverse(null)}><UniverseIcon /><span><strong>Universe</strong><small>Explore</small></span></button>
+          <button type="button" aria-current={mode === "today" ? "page" : undefined} onClick={openToday}><BriefingIcon /><span>Today</span></button>
+          <button type="button" aria-current={mode === "universe" ? "page" : undefined} onClick={() => openUniverse(null)}><UniverseIcon /><span>Universe</span></button>
         </nav>
         <nav className="inflow-utility-nav" aria-label="Tools">
-          <Link href="/saved"><SavedIcon /><span>Library</span></Link>
-          <button type="button" onClick={() => setSearchOpen(true)}><SearchIcon /><span>Search</span></button>
+          <Link href="/saved" aria-label="Open library" title="Library"><SavedIcon /></Link>
+          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search" title="Search"><SearchIcon /></button>
         </nav>
-        <div className="inflow-shell-status" role="status">{freshness?.staleSourceCount ? `${freshness.staleSourceCount} sources delayed` : freshness?.latestCheckedAt ? `Checked ${timeAgo(freshness.latestCheckedAt)} ago` : "Checking sources…"}</div>
+        <div className="inflow-source-health" role="status" title={sourceStatus} data-delayed={Boolean(freshness?.staleSourceCount)}><span aria-hidden /><span className="sr-only">{sourceStatus}</span></div>
         <button type="button" className="inflow-mobile-search" onClick={() => setSearchOpen(true)} aria-label="Search"><SearchIcon /></button>
       </header>
 
@@ -434,7 +439,7 @@ export function GalaxyApp({
       <nav className="inflow-mobile-nav" aria-label="Primary navigation">
         <button type="button" aria-current={mode === "today" ? "page" : undefined} onClick={openToday}><BriefingIcon /><span>Today</span></button>
         <button type="button" aria-current={mode === "universe" ? "page" : undefined} onClick={() => openUniverse(null)}><UniverseIcon /><span>Universe</span></button>
-        <Link href="/saved"><SavedIcon /><span>Saved</span></Link>
+        <Link href="/saved"><SavedIcon /><span>Library</span></Link>
         <button type="button" onClick={() => setSearchOpen(true)}><SearchIcon /><span>Search</span></button>
       </nav>
 

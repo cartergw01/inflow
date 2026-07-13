@@ -13,8 +13,6 @@ import {
 } from "../../lib/subjects";
 import {
   briefingSelectionReason,
-  briefingSummary,
-  joinLabels,
 } from "./briefing-presentation";
 
 function SaveIcon({ saved }: { saved: boolean }) {
@@ -27,6 +25,10 @@ function SaveIcon({ saved }: { saved: boolean }) {
 
 function ArrowIcon() {
   return <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden><path d="m7 4 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function MoreIcon() {
+  return <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden><circle cx="4" cy="10" r="1.25" fill="currentColor" /><circle cx="10" cy="10" r="1.25" fill="currentColor" /><circle cx="16" cy="10" r="1.25" fill="currentColor" /></svg>;
 }
 
 function trustLabel(story: GalaxyStoryDTO) {
@@ -168,6 +170,7 @@ export function BriefingPanel({ payload, onOpen, onOpenUniverse, onSelectWorld, 
   const [showMore, setShowMore] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   const [showTopicEditor, setShowTopicEditor] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const essentials = useMemo(() => payload.essentialIds.flatMap((id) => payload.stories[String(id)] ? [payload.stories[String(id)]] : []), [payload]);
   const more = useMemo(() => payload.moreIds.flatMap((id) => payload.stories[String(id)] ? [payload.stories[String(id)]] : []), [payload]);
   const readCount = essentials.filter((story) => story.read).length;
@@ -176,25 +179,30 @@ export function BriefingPanel({ payload, onOpen, onOpenUniverse, onSelectWorld, 
     return subject ? [subject.id] : [];
   }), [payload.worlds]);
   const selectedSubjectSet = useMemo(() => new Set(selectedSubjects), [selectedSubjects]);
-  const worldLabels = payload.worlds.map((world) => world.label);
 
   return (
     <aside className="briefing-panel" aria-label="Today’s personalized stories">
       <div className="briefing-panel__scroll">
         <header className="briefing-panel__header">
-          <span className="briefing-panel__eyebrow">Personalized news</span>
-          <h1>Today</h1>
-          <p className="briefing-panel__summary">{briefingSummary(payload.newCount)}</p>
-          <p className="briefing-panel__topics">Following {joinLabels(worldLabels)}</p>
-          <div className="briefing-panel__actions">
-            <button type="button" aria-expanded={showWhy} onClick={() => {
-              setShowWhy((open) => !open);
-              setShowTopicEditor(false);
-            }}>Why these stories?</button>
-            <button type="button" aria-expanded={showTopicEditor} onClick={() => {
-              setShowTopicEditor((open) => !open);
-              setShowWhy(false);
-            }}>Edit topics</button>
+          <div>
+            <span className="briefing-panel__eyebrow">Your briefing</span>
+            <div className="briefing-panel__title"><h1>Today</h1><span>{payload.newCount} new</span></div>
+            <p className="briefing-panel__summary">Ranked for you, with unread stories first.</p>
+          </div>
+          <div className="briefing-panel__menu-wrap">
+            <button type="button" className="briefing-panel__menu-trigger" aria-label="Today options" title="Today options" aria-haspopup="menu" aria-expanded={showMenu} aria-controls="briefing-panel-menu" onClick={() => setShowMenu((open) => !open)}><MoreIcon /></button>
+            {showMenu ? <div className="briefing-panel__menu" id="briefing-panel-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => {
+                setShowMenu(false);
+                setShowWhy((open) => !open);
+                setShowTopicEditor(false);
+              }}>Why these stories</button>
+              <button type="button" role="menuitem" onClick={() => {
+                setShowMenu(false);
+                setShowTopicEditor((open) => !open);
+                setShowWhy(false);
+              }}>Edit topics</button>
+            </div> : null}
           </div>
         </header>
 
@@ -223,9 +231,14 @@ export function BriefingPanel({ payload, onOpen, onOpenUniverse, onSelectWorld, 
           {showMore ? <div>{more.map((story, index) => <BriefingStoryRow key={story.id} story={story} index={index + essentials.length + 1} selectedSubjects={selectedSubjectSet} onOpen={() => onOpen(story)} onSaveChange={(saved) => onSaveChange(story.id, saved)} />)}</div> : null}
         </section>
 
-        <section className="briefing-worlds" aria-label="Explore your worlds">
-          {payload.worlds.map((world) => <button type="button" key={world.slug} onClick={() => onSelectWorld(world.slug)}><span style={{ background: VISUALS_BY_SLUG.get(world.slug)?.css ?? "#8ba2ff" }} aria-hidden /><strong>{world.label}</strong><small>{world.breaking ? "Breaking" : `${world.newCount} new`}</small></button>)}
-          <button type="button" className="briefing-worlds__all" onClick={onOpenUniverse}>Open universe <ArrowIcon /></button>
+        <section className="briefing-worlds" aria-labelledby="briefing-worlds-title">
+          <header>
+            <div><span>Explore</span><strong id="briefing-worlds-title">Your worlds</strong></div>
+            <button type="button" className="briefing-worlds__all" onClick={onOpenUniverse}>All worlds <ArrowIcon /></button>
+          </header>
+          <div className="briefing-worlds__list">
+            {payload.worlds.map((world) => <button type="button" key={world.slug} onClick={() => onSelectWorld(world.slug)}><span style={{ background: VISUALS_BY_SLUG.get(world.slug)?.css ?? "#8ba2ff" }} aria-hidden /><strong>{world.label}</strong><small>{world.breaking ? "Breaking" : `${world.newCount} new`}</small><ArrowIcon /></button>)}
+          </div>
         </section>
       </div>
     </aside>

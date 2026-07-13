@@ -18,6 +18,10 @@ function ArrowIcon() {
   return <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden><path d="M4 10h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
+function MoreIcon() {
+  return <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden><circle cx="4" cy="10" r="1.25" fill="currentColor" /><circle cx="10" cy="10" r="1.25" fill="currentColor" /><circle cx="16" cy="10" r="1.25" fill="currentColor" /></svg>;
+}
+
 function connectedWorlds(story: GalaxyStory, worlds: GalaxyWorldData[]) {
   return worlds
     .filter((world) => world.entries.some((entry) => entry.id === story.id) || story.topics.includes(world.slug))
@@ -34,10 +38,6 @@ function verification(story: GalaxyStory) {
 const scrollPositions = new Map<string, number>();
 const EMPTY_STORIES: GalaxyStory[] = [];
 
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
-
 export function UniverseRail({ data, view, focus, onSelectWorld, onFocus, onPreview, onOpen, onBack, onClear, onMute, onSaveChange }: {
   data: GalaxyPayload;
   view: string | null;
@@ -52,56 +52,38 @@ export function UniverseRail({ data, view, focus, onSelectWorld, onFocus, onPrev
   onSaveChange: (storyId: number, saved: boolean) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [focusMenuStoryId, setFocusMenuStoryId] = useState<number | null>(null);
   const world: GalaxyWorldData | null = view === "today" ? data.today : data.worlds.find((candidate) => candidate.slug === view) ?? null;
   const entries = world?.entries ?? EMPTY_STORIES;
   const visual = VISUALS_BY_SLUG.get(view ?? "today");
   const connections = focus ? connectedWorlds(focus.story, data.worlds) : [];
-  const title = world?.label ?? "All worlds";
+  const title = world?.label ?? "Universe";
   const subtitle = world
     ? `${world.newCount} new · ${world.entries.length} stories`
-    : `${data.worlds.length} worlds in your universe`;
+    : `${data.worlds.length} worlds · choose one to browse`;
   const selectedId = focus?.story.id ?? null;
-  const selectedIndex = useMemo(() => entries.findIndex((story) => story.id === selectedId), [entries, selectedId]);
   const scrollKey = view ?? "universe";
   const listRef = useRef<HTMLOListElement>(null);
   const rowRefs = useRef(new Map<number, HTMLLIElement>());
   const frameRef = useRef<number | null>(null);
-  const worldStripRef = useRef<HTMLDivElement>(null);
-  const worldTabRefs = useRef(new Map<string, HTMLButtonElement>());
-  const [range, setRange] = useState({ start: 0, end: Math.min(entries.length, 6), atStart: true, atEnd: entries.length <= 6 });
+  const [scrollEdges, setScrollEdges] = useState({ atStart: true, atEnd: entries.length <= 6 });
   const worldItems = useMemo(() => data.worlds.map((worldData) => ({
     slug: worldData.slug,
-    key: worldData.slug,
     label: worldData.label,
     newCount: worldData.newCount,
     storyCount: worldData.entries.length,
-    lead: worldData.entries[0]?.title ?? "No recent stories",
     color: VISUALS_BY_SLUG.get(worldData.slug)?.css ?? "#8ba2ff",
   })), [data.worlds]);
-  const activeWorldKey = view ?? "overview";
-  const activeWorldIndex = worldItems.findIndex((item) => item.slug === view);
 
   const measureRange = useCallback(() => {
     const list = listRef.current;
     if (!list) return;
     const rows = Array.from(list.children) as HTMLLIElement[];
     if (rows.length === 0) {
-      setRange({ start: 0, end: 0, atStart: true, atEnd: true });
+      setScrollEdges({ atStart: true, atEnd: true });
       return;
     }
-    const viewportTop = list.scrollTop + 1;
-    const viewportBottom = list.scrollTop + list.clientHeight - 1;
-    const first = rows.findIndex((row) => row.offsetTop + row.offsetHeight > viewportTop);
-    let last = rows.length - 1;
-    for (let index = Math.max(0, first); index < rows.length; index++) {
-      if (rows[index].offsetTop >= viewportBottom) {
-        last = Math.max(index - 1, first);
-        break;
-      }
-    }
-    setRange({
-      start: Math.max(0, first),
-      end: last + 1,
+    setScrollEdges({
       atStart: list.scrollTop <= 2,
       atEnd: list.scrollTop + list.clientHeight >= list.scrollHeight - 2,
     });
@@ -138,12 +120,6 @@ export function UniverseRail({ data, view, focus, onSelectWorld, onFocus, onPrev
     return () => cancelAnimationFrame(frame);
   }, [measureRange, selectedId]);
 
-  useEffect(() => {
-    const active = worldTabRefs.current.get(activeWorldKey);
-    if (!active) return;
-    active.scrollIntoView({ inline: "center", block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-  }, [activeWorldKey]);
-
   useEffect(() => () => {
     onPreview(null);
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
@@ -158,41 +134,19 @@ export function UniverseRail({ data, view, focus, onSelectWorld, onFocus, onPrev
     <aside className="universe-rail" data-collapsed={collapsed} style={{ "--rail-accent": visual?.css ?? "#8ba2ff" } as React.CSSProperties} aria-label={`${title} stories`}>
       <button type="button" className="universe-rail__handle" onClick={toggleCollapsed} aria-expanded={!collapsed} aria-label={collapsed ? "Expand story list" : "Collapse story list"}><span /></button>
       <header className="universe-rail__header">
-        <button type="button" className="universe-rail__back" onClick={onBack} aria-label={view ? "Back to all worlds" : "Open Today briefing"}><BackIcon /><span>{view ? "All worlds" : "Today"}</span></button>
-        <div className="universe-rail__heading"><div><span className="universe-rail__eyebrow">{view ? `Universe · World ${activeWorldIndex + 1} of ${worldItems.length}` : "Universe map"}</span><h1>{title}</h1><p>{subtitle}</p></div>{view ? <span className="universe-rail__range">{range.end ? `${pad(range.start + 1)}–${pad(range.end)}` : "00–00"} / {pad(entries.length)}</span> : null}</div>
+        {view ? <button type="button" className="universe-rail__back" onClick={onBack} aria-label="Back to all worlds" title="All worlds"><BackIcon /></button> : <span className="universe-rail__back-spacer" />}
+        <div className="universe-rail__heading"><h1>{title}</h1><p>{subtitle}</p></div>
         {focus ? <button type="button" onClick={onClear} aria-label="Clear selected story"><CloseIcon /></button> : <span />}
       </header>
 
-      {view ? <div ref={worldStripRef} className="universe-world-strip" role="tablist" aria-label="Choose a world">
-        <button type="button" className="universe-world-strip__overview" role="tab" aria-selected={false} tabIndex={-1} onClick={() => onSelectWorld(null)}><span>Overview</span></button>
-        {worldItems.map((item, index) => <button
-          key={item.key}
-          ref={(node) => { if (node) worldTabRefs.current.set(item.key, node); else worldTabRefs.current.delete(item.key); }}
-          type="button"
-          role="tab"
-          aria-selected={activeWorldKey === item.key}
-          tabIndex={activeWorldKey === item.key ? 0 : -1}
-          style={{ "--world-color": item.color } as React.CSSProperties}
-          onClick={() => onSelectWorld(item.slug)}
-          onKeyDown={(event) => {
-            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
-            event.preventDefault();
-            const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? worldItems.length - 1 : (index + (event.key === "ArrowLeft" ? -1 : 1) + worldItems.length) % worldItems.length;
-            const next = worldItems[nextIndex];
-            onSelectWorld(next.slug);
-            requestAnimationFrame(() => worldTabRefs.current.get(next.key)?.focus());
-          }}
-        ><span className="universe-world-strip__signal" aria-hidden /><span>{item.label}</span><small aria-label={`${item.newCount} new stories`}>{item.newCount}</small></button>)}
-      </div> : null}
+      {view ? <label className="universe-world-picker"><span>Switch world</span><select value={view} onChange={(event) => onSelectWorld(event.target.value || null)}><option value="">All worlds</option>{worldItems.map((item) => <option key={item.slug} value={item.slug}>{item.label} · {item.newCount} new</option>)}</select></label> : null}
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{focus ? `Selected story: ${focus.story.title}` : `${title} stories`}</p>
 
-      {!view ? <section className="universe-world-directory" aria-labelledby="universe-world-directory-title">
-        <header><div><span>Explore by topic</span><h2 id="universe-world-directory-title">Choose a world</h2></div><small>{pad(worldItems.length)} worlds</small></header>
+      {!view ? <section className="universe-world-directory" aria-label="Choose a world">
         <div className="universe-world-directory__list">
-          {worldItems.map((item, index) => <button key={item.key} type="button" style={{ "--world-color": item.color } as React.CSSProperties} onClick={() => onSelectWorld(item.slug)}>
-            <span className="universe-world-directory__index">{pad(index + 1)}</span>
+          {worldItems.map((item) => <button key={item.slug} type="button" style={{ "--world-color": item.color } as React.CSSProperties} onClick={() => onSelectWorld(item.slug)}>
             <span className="universe-world-directory__signal" aria-hidden />
-            <span className="universe-world-directory__main"><strong>{item.label}</strong><small>{item.newCount} new · {item.storyCount} stories</small><span>{item.lead}</span></span>
+            <span className="universe-world-directory__main"><strong>{item.label}</strong><small>{item.newCount} new · {item.storyCount} stories</small></span>
             <ArrowIcon />
           </button>)}
         </div>
@@ -211,14 +165,16 @@ export function UniverseRail({ data, view, focus, onSelectWorld, onFocus, onPrev
             onSaveChange(focus.story.id, saved);
           }}>{focus.story.saved ? "Saved" : "Save"}</button>
           <button type="button" className="universe-focus__read" onClick={() => onOpen(focus.story, true)}>Read story</button>
-          <button type="button" onClick={() => onMute(focus.story)}>Mute source</button>
+          <div className="universe-focus__menu-wrap">
+            <button type="button" className="universe-focus__menu-trigger" aria-label="Story options" title="Story options" aria-haspopup="menu" aria-expanded={focusMenuStoryId === focus.story.id} onClick={() => setFocusMenuStoryId((current) => current === focus.story.id ? null : focus.story.id)}><MoreIcon /></button>
+            {focusMenuStoryId === focus.story.id ? <div className="universe-focus__menu" role="menu"><button type="button" role="menuitem" onClick={() => { setFocusMenuStoryId(null); onMute(focus.story); }}>Mute {focus.story.sourceName}</button></div> : null}
+          </div>
         </div>
-        {selectedIndex >= 0 ? <div className="universe-focus__step"><button type="button" disabled={selectedIndex === 0} onClick={() => onFocus(entries[selectedIndex - 1])}>← Previous</button><span>{selectedIndex + 1} / {entries.length}</span><button type="button" disabled={selectedIndex === entries.length - 1} onClick={() => onFocus(entries[selectedIndex + 1])}>Next →</button></div> : null}
       </section> : null}
 
-      {view ? <div className="universe-story-scroll" data-at-start={range.atStart} data-at-end={range.atEnd}>
+      {view ? <div className="universe-story-scroll" data-at-start={scrollEdges.atStart} data-at-end={scrollEdges.atEnd}>
         <ol ref={listRef} className="universe-story-list" onScroll={scheduleMeasure}>
-          {entries.map((story, index) => <li key={story.id} ref={(node) => { if (node) rowRefs.current.set(story.id, node); else rowRefs.current.delete(story.id); }} data-selected={story.id === selectedId} data-read={story.read}>
+          {entries.map((story) => <li key={story.id} ref={(node) => { if (node) rowRefs.current.set(story.id, node); else rowRefs.current.delete(story.id); }} data-selected={story.id === selectedId} data-read={story.read}>
             <button type="button" className="universe-story-list__headline"
               onPointerEnter={() => onPreview(story)}
               onPointerLeave={() => onPreview(null)}
@@ -227,10 +183,9 @@ export function UniverseRail({ data, view, focus, onSelectWorld, onFocus, onPrev
               onClick={() => { onPreview(null); onFocus(story); }}
               aria-label={`Select ${story.title}`}
               aria-current={story.id === selectedId ? "true" : undefined}>
-              <span className="universe-story-list__index">{pad(index + 1)}</span>
+              <span className="universe-story-list__signal" style={{ background: visual?.css ?? "#8ba2ff" }} aria-hidden />
               <span className="universe-story-list__main"><strong>{story.title}</strong><small>{story.sourceName} · {timeAgo(story.publishedAt)} ago{story.readingMinutes ? ` · ${story.readingMinutes} min` : ""}</small></span>
             </button>
-            <button type="button" className="universe-story-list__spark" onClick={() => { onPreview(null); onFocus(story); }} onFocus={() => onPreview(story)} onBlur={() => onPreview(null)} aria-label={`Show ${story.title} in the galaxy`}><span style={{ background: visual?.css ?? "#8ba2ff" }} aria-hidden /></button>
           </li>)}
         </ol>
       </div> : null}

@@ -8,7 +8,7 @@ export function storyVisualSize(index: number): number {
 
 /** A larger, invisible target keeps tiny sparks comfortable to click. */
 export function storyHitSize(index: number): number {
-  return Math.max(0.22, storyVisualSize(index) * 2.8);
+  return Math.max(0.3, storyVisualSize(index) * 3.6);
 }
 
 export function storyGlowSize(index: number, fresh: number, read: boolean): number {

@@ -10,7 +10,7 @@ describe("story marker visuals", () => {
 
   it("keeps invisible hit areas larger than the rendered spark", () => {
     for (const index of [0, 5, 20, 100]) {
-      expect(storyHitSize(index)).toBeGreaterThan(storyVisualSize(index) * 2);
+      expect(storyHitSize(index)).toBeGreaterThan(storyVisualSize(index) * 3);
     }
   });
 

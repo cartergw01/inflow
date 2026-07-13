@@ -106,6 +106,8 @@ export interface HudLabel {
   opacity: number;
   /** Story represented by this label. */
   storyId?: number;
+  /** World represented by an interactive map label. */
+  world?: string;
 }
 
 export interface EngineCallbacks {
@@ -247,6 +249,7 @@ export class GalaxyEngine {
   private focusedId: number | null = null;
   private previewedId: number | null = null;
   private hoveredStoryId: number | null = null;
+  private hoveredWorldSlug: string | null = null;
 
   private data: GalaxyPayload;
 
@@ -752,7 +755,7 @@ export class GalaxyEngine {
       const size = this.storySize(i);
       m4.makeScale(size, size, size).setPosition(p);
       mesh.setMatrixAt(i, m4);
-      const hitSize = storyHitSize(i);
+      const hitSize = storyHitSize(i) * (this.isMobile ? 1.3 : 1);
       m4.makeScale(hitSize, hitSize, hitSize).setPosition(p);
       hitMesh.setMatrixAt(i, m4);
 
@@ -827,7 +830,7 @@ export class GalaxyEngine {
 
   private getStoryRef(id: number, preferredWorld: string | null = this.view): StoryRef | null {
     const refs = this.stories.get(id) ?? [];
-    return refs.find((ref) => ref.world === preferredWorld) ?? refs[0] ?? null;
+    return refs.find((ref) => ref.world === preferredWorld) ?? refs.find((ref) => ref.world !== "today") ?? refs[0] ?? null;
   }
 
   /* ── input ─────────────────────────────────────────────────────── */
@@ -865,7 +868,9 @@ export class GalaxyEngine {
       this.dragging = false;
       el.style.cursor = "default";
       this.hoveredStoryId = null;
+      this.hoveredWorldSlug = null;
       this.syncStoryPreview();
+      this.emitLabels();
     });
     el.addEventListener("pointercancel", () => {
       this.dragging = false;
@@ -930,6 +935,8 @@ export class GalaxyEngine {
     this.raycaster.setFromCamera(ndc, this.camera);
     let position: THREE.Vector3 | null = null;
     let size = 1;
+    const previousStoryId = this.hoveredStoryId;
+    const previousWorldSlug = this.hoveredWorldSlug;
 
     if (this.view) {
       const mesh = this.storyHitTargets.get(this.view);
@@ -937,38 +944,50 @@ export class GalaxyEngine {
       if (hit?.instanceId !== undefined) {
         const story = this.byWorldIndex.get(this.view)?.[hit.instanceId];
         this.hoveredStoryId = story?.id ?? null;
+        this.hoveredWorldSlug = null;
         position = story ? new THREE.Vector3() : null;
       } else {
         this.hoveredStoryId = null;
+        const worldHits = this.raycaster.intersectObjects(this.hitTargets, false);
+        const foreign = worldHits.find((entry) => entry.object.userData.world !== this.view && entry.object.userData.world !== "today");
+        this.hoveredWorldSlug = foreign ? String(foreign.object.userData.world) : null;
+        if (this.hoveredWorldSlug) {
+          position = this.worldGroups.get(this.hoveredWorldSlug)?.position.clone() ?? null;
+          size = 1.15 * (this.worldScales.get(this.hoveredWorldSlug) ?? 1);
+        }
       }
       this.syncStoryPreview();
     } else {
+      this.hoveredStoryId = null;
       const bridgeHit = this.raycaster.intersectObjects(this.bridges.map((bridge) => bridge.tube), false)[0];
       if (bridgeHit) {
+        this.hoveredWorldSlug = null;
         position = bridgeHit.point.clone();
         size = 0.55;
       } else {
-        const worldHit = this.raycaster.intersectObjects(this.hitTargets, false)[0];
+        const worldHit = this.raycaster.intersectObjects(this.hitTargets, false).find((entry) => entry.object.userData.world !== "today");
         if (worldHit) {
           const slug = worldHit.object.userData.world as string;
+          this.hoveredWorldSlug = slug;
           position = this.worldGroups.get(slug)?.position.clone() ?? null;
           size = 1.25 * (this.worldScales.get(slug) ?? 1);
+        } else {
+          this.hoveredWorldSlug = null;
         }
       }
     }
 
     el.style.cursor = position ? "pointer" : this.dragging ? "grabbing" : "grab";
-    if (!this.view) {
-      const material = this.hoverRing.material as THREE.MeshBasicMaterial;
-      if (this.previewedId !== null) this.syncStoryPreview();
-      else {
-        material.opacity = position ? 0.42 : 0;
-        if (position) {
-          this.hoverRing.position.copy(position);
-          this.hoverRing.scale.setScalar(size);
-        }
+    const material = this.hoverRing.material as THREE.MeshBasicMaterial;
+    if (this.previewedId !== null || this.hoveredStoryId !== null) this.syncStoryPreview();
+    else {
+      material.opacity = position ? 0.42 : 0;
+      if (position) {
+        this.hoverRing.position.copy(position);
+        this.hoverRing.scale.setScalar(size);
       }
     }
+    if (previousStoryId !== this.hoveredStoryId || previousWorldSlug !== this.hoveredWorldSlug) this.emitLabels();
   }
 
   private syncStoryPreview() {
@@ -992,6 +1011,7 @@ export class GalaxyEngine {
   previewStory(id: number | null) {
     this.previewedId = id;
     this.syncStoryPreview();
+    this.emitLabels();
   }
 
   private clampRadius(r: number): number {
@@ -1012,9 +1032,9 @@ export class GalaxyEngine {
         this.warpToStory(bridgeHits[0].object.userData.bridgeStory as number);
         return;
       }
-      const hits = this.raycaster.intersectObjects(this.hitTargets, false);
-      if (hits.length > 0) {
-        this.enterWorld(hits[0].object.userData.world as string);
+      const hit = this.raycaster.intersectObjects(this.hitTargets, false).find((entry) => entry.object.userData.world !== "today");
+      if (hit) {
+        this.enterWorld(hit.object.userData.world as string);
         return;
       }
       this.clearFocus();
@@ -1032,7 +1052,7 @@ export class GalaxyEngine {
       }
     }
     const worldHits = this.raycaster.intersectObjects(this.hitTargets, false);
-    const foreign = worldHits.find((hit) => hit.object.userData.world !== this.view);
+    const foreign = worldHits.find((hit) => hit.object.userData.world !== this.view && hit.object.userData.world !== "today");
     if (foreign) {
       this.enterWorld(foreign.object.userData.world as string);
       return;
@@ -1052,8 +1072,11 @@ export class GalaxyEngine {
 
   enterWorld(slug: string, options: { fast?: boolean; origin?: NavigationOrigin } = {}) {
     const group = this.worldGroups.get(slug);
-    if (!group) return;
+    if (!group || slug === "today") return;
     this.clearFocus();
+    this.hoveredStoryId = null;
+    this.hoveredWorldSlug = null;
+    this.previewedId = null;
     this.view = slug;
     this.cb.onView(slug, options.origin ?? "interactive");
     const scale = this.worldScales.get(slug) ?? 1;
@@ -1065,7 +1088,7 @@ export class GalaxyEngine {
 
   stepWorld(direction: -1 | 1) {
     if (this.paused || this.focusedId !== null) return;
-    const worldOrder = [this.data.today.slug, ...this.data.worlds.map((world) => world.slug)];
+    const worldOrder = this.data.worlds.map((world) => world.slug);
     const current = worldOrder.indexOf(this.view ?? "");
     const next = current < 0
       ? direction > 0 ? 0 : worldOrder.length - 1
@@ -1112,6 +1135,9 @@ export class GalaxyEngine {
 
   exitToGalaxy(options: { fast?: boolean; origin?: NavigationOrigin } = {}) {
     this.clearFocus();
+    this.hoveredStoryId = null;
+    this.hoveredWorldSlug = null;
+    this.previewedId = null;
     this.view = null;
     this.cb.onView(null, options.origin ?? "interactive");
     this.flyTo(
@@ -1278,6 +1304,7 @@ export class GalaxyEngine {
     const out: { id: number; title: string; world: string; sourceName: string }[] = [];
     const seen = new Set<number>();
     for (const [slug, entries] of this.byWorldIndex) {
+      if (slug === "today") continue;
       for (const s of entries) {
         if (seen.has(s.id)) continue;
         seen.add(s.id);
@@ -1329,6 +1356,7 @@ export class GalaxyEngine {
 
     if (this.view === null) {
       for (const [slug, group] of this.worldGroups) {
+        if (slug === "today") continue;
         const visual = VISUALS_BY_SLUG.get(slug)!;
         const data = slug === "today" ? this.data.today : this.data.worlds.find((w) => w.slug === slug);
         if (!data) continue;
@@ -1345,6 +1373,7 @@ export class GalaxyEngine {
           x: p.x,
           y: p.y,
           opacity: 1,
+          world: slug,
         });
       }
       if (!this.isMobile) {
@@ -1364,11 +1393,12 @@ export class GalaxyEngine {
           });
         }
       }
-      const focusedRef = this.focusedId === null ? null : this.getStoryRef(this.focusedId);
-      if (focusedRef) {
-        const group = this.worldGroups.get(focusedRef.world);
-        const story = focusedRef.story;
-        const p = group ? project(group.localToWorld(focusedRef.local.clone()).add(TMP.set(0, this.storySize(focusedRef.index) * 3 + 0.4, 0))) : null;
+      const labelId = this.hoveredStoryId ?? this.previewedId ?? this.focusedId;
+      const labelRef = labelId === null ? null : this.getStoryRef(labelId);
+      if (labelRef) {
+        const group = this.worldGroups.get(labelRef.world);
+        const story = labelRef.story;
+        const p = group ? project(group.localToWorld(labelRef.local.clone()).add(TMP.set(0, this.storySize(labelRef.index) * 3 + 0.4, 0))) : null;
         if (p) labels.push({
           key: `s-${story.id}`,
           kind: "story",
@@ -1382,8 +1412,28 @@ export class GalaxyEngine {
         });
       }
     } else {
-      const group = this.worldGroups.get(this.view);
-      const ref = this.focusedId === null ? null : this.getStoryRef(this.focusedId);
+      if (this.hoveredWorldSlug) {
+        const slug = this.hoveredWorldSlug;
+        const group = this.worldGroups.get(slug);
+        const visual = VISUALS_BY_SLUG.get(slug);
+        const data = slug === "today" ? this.data.today : this.data.worlds.find((candidate) => candidate.slug === slug);
+        const scale = this.worldScales.get(slug) ?? 1;
+        const p = group ? project(group.position.clone().add(TMP.set(0, -5 * scale - 1.2, 0))) : null;
+        if (p && visual && data) labels.push({
+          key: `w-${slug}`,
+          kind: "world",
+          text: visual.label.toUpperCase(),
+          sub: data.newCount > 0 ? `${data.newCount} NEW` : "UP TO DATE",
+          color: visual.css,
+          x: p.x,
+          y: p.y,
+          opacity: 1,
+          world: slug,
+        });
+      }
+      const labelId = this.hoveredStoryId ?? this.previewedId ?? this.focusedId;
+      const ref = labelId === null ? null : this.getStoryRef(labelId);
+      const group = ref ? this.worldGroups.get(ref.world) : null;
       if (group && ref) {
         const story = ref.story;
         const p = project(group.localToWorld(ref.local.clone()).add(TMP.set(0, this.storySize(ref.index) * 3 + 0.4, 0)));

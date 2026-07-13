@@ -15,7 +15,6 @@ import { UniverseRail } from "./universe-rail";
 import type { WarpTarget } from "./warp-bar";
 
 const STATE_KEY = "inflow-galaxy-state-v2";
-const CONTROLS_SEEN_KEY = "inflow-controls-seen";
 const ReaderOverlay = dynamic(() => import("./reader-overlay").then((mod) => mod.ReaderOverlay));
 const WarpBar = dynamic(() => import("./warp-bar").then((mod) => mod.WarpBar));
 
@@ -51,7 +50,6 @@ export function GalaxyApp({
   const modeRef = useRef<GalaxyAppMode>(initialMode);
   const impressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impressed = useRef(new Set<number>());
   const readerCache = useRef(new Map<number, Promise<ReaderPayload | null>>());
   const readerReturnPath = useRef(initialWorld ? `/g/${initialWorld}` : initialMode === "universe" ? "/universe" : "/");
@@ -69,19 +67,9 @@ export function GalaxyApp({
   const [reading, setReading] = useState<ReaderPayload | null>(null);
   const [readerPending, setReaderPending] = useState(false);
   const [diving, setDiving] = useState(false);
-  const [compactUniverse, setCompactUniverse] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState<{ id: number; title: string; world: string; sourceName: string }[]>([]);
   const [toast, setToast] = useState<string | null>(null);
-  const [showHint, setShowHint] = useState(false);
-
-  useEffect(() => {
-    const query = matchMedia("(max-width: 900px)");
-    const update = () => setCompactUniverse(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
 
   const fetchReader = useCallback((itemId: number) => {
     const existing = readerCache.current.get(itemId);
@@ -94,12 +82,6 @@ export function GalaxyApp({
       if (!result) readerCache.current.delete(itemId);
     });
     return request;
-  }, []);
-
-  const dismissHint = useCallback(() => {
-    setShowHint(false);
-    try { localStorage.setItem(CONTROLS_SEEN_KEY, "1"); } catch { /* storage may be unavailable */ }
-    if (hintTimer.current) clearTimeout(hintTimer.current);
   }, []);
 
   const pathForContext = useCallback(() => mode === "today" ? "/" : view ? `/g/${view}` : "/universe", [mode, view]);
@@ -125,13 +107,7 @@ export function GalaxyApp({
       const path = world ? `/g/${world}` : "/universe";
       if (location.pathname !== path) history.pushState({ mode: "universe", world: world ?? null }, "", path);
     }
-    try {
-      if (localStorage.getItem(CONTROLS_SEEN_KEY) !== "1") {
-        setShowHint(true);
-        hintTimer.current = setTimeout(dismissHint, 9000);
-      }
-    } catch { /* hint is optional */ }
-  }, [dismissHint]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -223,7 +199,6 @@ export function GalaxyApp({
       engineRef.current?.dispose();
       engineRef.current = null;
       if (prefetchTimer.current) clearTimeout(prefetchTimer.current);
-      if (hintTimer.current) clearTimeout(hintTimer.current);
     };
     // Engine boot is intentionally one-shot; callbacks own later navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -412,24 +387,33 @@ export function GalaxyApp({
   }, [fetchReader, readerNeighbors, reading]);
 
   const accent = view ? VISUALS_BY_SLUG.get(view)?.css ?? "#8ba2ff" : "#8ba2ff";
-  const visibleLabels = labels.filter((label) => label.kind === "world" || (focus && label.kind === "story" && label.storyId === focus.story.id));
+  const visibleLabels = mode === "universe" ? labels.filter((label) => label.kind === "world" || label.kind === "story") : [];
   const freshness = briefing?.freshness ?? data?.freshness;
 
   return (
-    <div className="observatory-shell fixed inset-0 bg-[#04040a] text-white overflow-hidden" data-mode={mode}>
+    <div className="observatory-shell fixed inset-0 bg-[#04040a] text-white overflow-hidden" data-mode={mode} data-view={view ?? "overview"}>
       <div className="contents" inert={reading ? true : undefined} aria-hidden={reading ? true : undefined}>
-      <canvas ref={canvasRef} onPointerDown={() => { if (showHint) dismissHint(); }} className="galaxy-canvas absolute inset-0 touch-none" aria-hidden="true" tabIndex={-1} />
-      <div className="galaxy-label-layer absolute inset-0 pointer-events-none select-none" aria-hidden>
-        {visibleLabels.map((label) => <div key={label.key} className="galaxy-label" style={{ left: label.x, top: label.y, opacity: label.opacity }}><strong>{label.text}</strong>{label.sub ? <span style={{ color: label.color }}>{label.sub}</span> : null}</div>)}
+      <canvas ref={canvasRef} className="galaxy-canvas absolute inset-0 touch-none" aria-hidden="true" tabIndex={-1} />
+      <div className="galaxy-label-layer absolute inset-0 pointer-events-none select-none" role="group" aria-label="Universe destinations">
+        {visibleLabels.map((label) => label.kind === "world" && label.world ? <button
+          key={label.key}
+          type="button"
+          className="galaxy-label galaxy-label--world"
+          style={{ left: label.x, top: label.y, opacity: label.opacity, "--label-color": label.color } as React.CSSProperties}
+          onClick={() => openUniverse(label.world)}
+          aria-label={`Open ${label.text} world`}
+        ><strong>{label.text}</strong>{label.sub ? <span>{label.sub}</span> : null}</button> : <div key={label.key} className="galaxy-label galaxy-label--story" style={{ left: label.x, top: label.y, opacity: label.opacity, "--label-color": label.color } as React.CSSProperties} aria-hidden><strong>{label.text}</strong>{label.sub ? <span>{label.sub}</span> : null}</div>)}
       </div>
 
       <header className="inflow-shell-header">
         <button type="button" className="galaxy-brand" onClick={openToday}><span style={{ background: accent }} aria-hidden /><strong>INFLOW</strong></button>
-        <nav className="inflow-primary-nav" aria-label="Primary navigation">
-          <button type="button" aria-current={mode === "today" ? "page" : undefined} onClick={openToday}>Today</button>
-          <button type="button" aria-current={mode === "universe" ? "page" : undefined} onClick={() => openUniverse(null)}>Universe</button>
-          <Link href="/saved">Library</Link>
-          <button type="button" onClick={() => setSearchOpen(true)}>Search</button>
+        <nav className="inflow-mode-switch" aria-label="News view">
+          <button type="button" aria-current={mode === "today" ? "page" : undefined} onClick={openToday}><BriefingIcon /><span><strong>Today</strong><small>Briefing</small></span></button>
+          <button type="button" aria-current={mode === "universe" ? "page" : undefined} onClick={() => openUniverse(null)}><UniverseIcon /><span><strong>Universe</strong><small>Explore</small></span></button>
+        </nav>
+        <nav className="inflow-utility-nav" aria-label="Tools">
+          <Link href="/saved"><SavedIcon /><span>Library</span></Link>
+          <button type="button" onClick={() => setSearchOpen(true)}><SearchIcon /><span>Search</span></button>
         </nav>
         <div className="inflow-shell-status" role="status">{freshness?.staleSourceCount ? `${freshness.staleSourceCount} sources delayed` : freshness?.latestCheckedAt ? `Checked ${timeAgo(freshness.latestCheckedAt)} ago` : "Checking sources…"}</div>
         <button type="button" className="inflow-mobile-search" onClick={() => setSearchOpen(true)} aria-label="Search"><SearchIcon /></button>
@@ -437,9 +421,7 @@ export function GalaxyApp({
 
       {mode === "today" ? briefing ? <BriefingPanel payload={briefing} onOpen={openReader} onOpenUniverse={() => openUniverse(null)} onSelectWorld={(slug) => openUniverse(slug)} onSaveChange={setStorySaved} /> : briefingStatus === "error" ? <div className="briefing-error"><strong>Today is unavailable.</strong><button type="button" onClick={() => location.reload()}>Try again</button></div> : <BriefingSkeleton /> : null}
 
-      {mode === "universe" ? data && universeStatus === "ready" ? <UniverseRail data={data} view={view} focus={focus} activationMode={compactUniverse ? "read" : "preview"} onSelectWorld={openUniverse} onFocus={(story) => engineRef.current?.focusStory(story.id)} onPreview={previewStory} onOpen={openReader} onBack={() => view ? engineRef.current?.exitToGalaxy({ origin: "interactive" }) : openToday()} onClear={() => engineRef.current?.clearFocus()} onMute={muteSource} onSaveChange={setStorySaved} /> : <div className="universe-loading" role="status"><span /><strong>{universeStatus === "error" ? "Universe unavailable" : "Charting your universe…"}</strong>{universeStatus === "error" ? <button type="button" onClick={() => location.reload()}>Retry</button> : null}</div> : null}
-
-      {showHint && mode === "universe" ? <div className="galaxy-control-hint" role="status"><span>Drag to move · scroll or pinch to zoom · choose any story from the rail</span><button type="button" onClick={dismissHint}>Got it</button></div> : null}
+      {mode === "universe" ? data && universeStatus === "ready" ? <UniverseRail data={data} view={view} focus={focus} onSelectWorld={openUniverse} onFocus={(story) => engineRef.current?.focusStory(story.id)} onPreview={previewStory} onOpen={openReader} onBack={() => view ? engineRef.current?.exitToGalaxy({ origin: "interactive" }) : openToday()} onClear={() => engineRef.current?.clearFocus()} onMute={muteSource} onSaveChange={setStorySaved} /> : <div className="universe-loading" role="status"><span /><strong>{universeStatus === "error" ? "Universe unavailable" : "Charting your universe…"}</strong>{universeStatus === "error" ? <button type="button" onClick={() => location.reload()}>Retry</button> : null}</div> : null}
       <div className="dive-cover" data-active={diving} aria-hidden />
 
       {searchOpen ? <WarpBar stories={searchIndex} worlds={data?.worlds ?? briefing?.worlds ?? []} onWarp={(target: WarpTarget) => {

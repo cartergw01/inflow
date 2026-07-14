@@ -389,6 +389,7 @@ export function GalaxyApp({
   const accent = view ? VISUALS_BY_SLUG.get(view)?.css ?? "#8ba2ff" : "#8ba2ff";
   const visibleLabels = mode === "universe" ? labels.filter((label) => label.kind === "world" || label.kind === "story") : [];
   const freshness = briefing?.freshness ?? data?.freshness;
+  const readerBlocking = Boolean(reading || readerPending);
   const sourceStatus = freshness?.staleSourceCount
     ? `${freshness.staleSourceCount} sources delayed`
     : freshness?.latestCheckedAt
@@ -397,7 +398,7 @@ export function GalaxyApp({
 
   return (
     <div className="observatory-shell fixed inset-0 bg-[#04040a] text-white overflow-hidden" data-mode={mode} data-view={view ?? "overview"}>
-      <div className="contents" inert={reading ? true : undefined} aria-hidden={reading ? true : undefined}>
+      <div className="contents" inert={readerBlocking ? true : undefined} aria-hidden={readerBlocking ? true : undefined}>
       <canvas ref={canvasRef} className="galaxy-canvas absolute inset-0 touch-none" aria-hidden="true" tabIndex={-1} />
       <div className="galaxy-label-layer absolute inset-0 pointer-events-none select-none" role="group" aria-label="Universe destinations">
         {visibleLabels.map((label) => label.kind === "world" && label.world ? <button
